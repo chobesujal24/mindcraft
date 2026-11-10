@@ -11,7 +11,6 @@ truth for every API route.
 | --- | --- |
 | `public/index.html` | Built, offline-capable single-file React SPA. This is the default dashboard. |
 | `public/legacy.html` | The previous dashboard, kept intact for rollback. |
-| `public/index.html.legacy.bak` | Copy of the previous root page. Keep unless you have another backup. |
 | `app/` | Vite + React + TypeScript source for the new dashboard. |
 | `app/mock-server.mjs` | Fixture server used for design review and front-end regression checks. |
 | `server.js` | Unchanged supervisor, API, auth, and legacy routing. |
@@ -87,10 +86,11 @@ non-local clients.
 ## Rollback
 
 - Per session: open `/?tab=legacy` (or `/legacy`).
-- Global: replace `public/index.html` with `public/index.html.legacy.bak` and
-  restart the dashboard service.
-- Source-only rollback: remove `app/` and the built `index.html`. The
-  supervisor and the legacy page do not depend on either.
+- To make the old page the default, first save the current `public/index.html`
+  outside the deployed directory, copy `public/legacy.html` to
+  `public/index.html`, then restart the dashboard service. Restore the saved
+  file to return to the React dashboard.
+- The supervisor and legacy page do not depend on the React source in `app/`.
 
 ## Preserved behavior
 
@@ -162,5 +162,4 @@ Run this after deploying:
   paths used by `server.js`.
 - The dashboard is intentionally dependency-light: React and React DOM are the
   only runtime dependencies. Fonts and artwork are embedded in the bundle.
-- Keep `legacy.html` and `index.html.legacy.bak` until the new dashboard has
-  completed a full deployment cycle.
+- Keep `legacy.html` while you want the `/legacy` route and quick rollback page.

@@ -1,0 +1,1282 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Mindcraft</title>
+    <script src="/socket.io/socket.io.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background: #1a1a1a;
+            color: #e0e0e0;
+            padding-bottom: 80px;
+        }
+        #agents {
+            background: #2d2d2d;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        }
+        h1 {
+            color: #ffffff;
+        }
+        .agent {
+            margin: 10px 0;
+            padding: 10px;
+            background: #363636;
+            border-radius: 4px;
+            display: flex;
+            flex-direction: column;
+            align-items: stretch;
+        }
+        .restart-btn, .start-btn, .stop-btn {
+            color: white;
+            border: none;
+            padding: 5px 10px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-left: 5px;
+        }
+        .restart-btn {
+            background: #4CAF50;
+        }
+        .start-btn {
+            background: #2196F3;
+        }
+        .stop-btn {
+            background: #f44336;
+        }
+        .restart-btn:hover { background: #45a049; }
+        .start-btn:hover { background: #1976D2; }
+        .stop-btn:hover { background: #d32f2f; }
+        .gear-btn {
+            background: #505050;
+            color: #fff;
+            border: none;
+            border-radius: 4px;
+            padding: 2px 6px;
+            cursor: pointer;
+            margin-left: 6px;
+            font-size: 0.9em;
+        }
+        .gear-btn:hover { background: #5a5a5a; }
+        .status-icon {
+            font-size: 12px;
+            margin-right: 8px;
+        }
+        .status-icon.online {
+            color: #4CAF50;
+        }
+        .status-icon.offline {
+            color: #f44336;
+        }
+        #settingsForm {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+            gap: 8px;
+            margin-top: 10px;
+        }
+        .setting-wrapper {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            background: #3a3a3a;
+            padding: 6px 8px;
+            border-radius: 4px;
+            width: 100%;
+            box-sizing: border-box;
+            min-width: 0;
+        }
+        .setting-wrapper label {
+            flex: 0 0 50%;
+            font-size: 0.9em;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .setting-wrapper input[type="text"],
+        .setting-wrapper input[type="number"] {
+            flex: 1 1 0;
+            background: #262626;
+            border: 1px solid #555;
+            color: #e0e0e0;
+            border-radius: 4px;
+            padding: 4px 6px;
+            max-width: 100%;
+            min-width: 0;
+        }
+        .setting-wrapper.setting-json-wrapper {
+            align-items: stretch;
+            flex-direction: column;
+        }
+        .setting-wrapper.setting-json-wrapper label {
+            flex: 0 0 auto;
+        }
+        .setting-wrapper textarea.setting-json-input {
+            box-sizing: border-box;
+            width: 100%;
+            min-height: 72px;
+            resize: vertical;
+            background: #262626;
+            border: 1px solid #555;
+            color: #e0e0e0;
+            border-radius: 4px;
+            padding: 6px;
+            font: 0.9em/1.4 monospace;
+        }
+        .setting-wrapper input[type="checkbox"] {
+            transform: scale(1.2);
+        }
+        .agent-view-container {
+            width: 100%;
+            height: 100%;
+            aspect-ratio: 4/3;
+            overflow: hidden;
+            margin-top: 6px;
+            display: flex;
+            justify-content: flex-start;
+        }
+        .agent-viewer {
+            width: 100%;
+            height: 100%;
+            border: none;
+            display: block;
+        }
+        .last-message {
+            font-style: italic;
+            color: #aaa;
+            margin-top: 5px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            width: 100%;
+        }
+        .start-btn:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
+        .agent-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+            gap: 8px;
+            width: 100%;
+            align-items: start;
+        }
+        .agent-grid .cell {
+            background: #3a3a3a;
+            padding: 6px 8px;
+            border-radius: 4px;
+        }
+        .agent-grid .cell.title {
+            background: transparent;
+            padding: 0;
+        }
+        .agent-inventory {
+            margin-top: 8px;
+            background: #2f2f2f;
+            border-radius: 6px;
+            padding: 8px;
+        }
+        .agent-inventory h3 { margin: 0 0 6px 0; font-size: 1em; }
+        .inventory-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+            gap: 6px;
+        }
+        .controls-row {
+            margin-top: 8px;
+            display: grid;
+            grid-template-columns: auto minmax(100px, 1fr) repeat(5, auto);
+            gap: 8px;
+            align-items: center;
+        }
+        .direct-cmd-row {
+            margin-top: 8px;
+            background: #2b2b2b;
+            border: 1px solid #444;
+            border-radius: 6px;
+            padding: 8px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            align-items: center;
+        }
+        .direct-cmd-label {
+            font-size: 0.85em;
+            font-weight: bold;
+            color: #ffb74d;
+            margin-right: 4px;
+        }
+        .quick-tp-btn {
+            background: #3d5afe;
+            color: #fff;
+            border: none;
+            border-radius: 4px;
+            padding: 5px 10px;
+            cursor: pointer;
+            font-size: 0.85em;
+        }
+        .quick-tp-btn:hover { background: #304ffe; }
+        .quick-tp-btn:disabled {
+            background: #383838;
+            color: #666;
+            cursor: not-allowed;
+        }
+        .msg-input {
+            width: calc(100% - 8px);
+            background: #262626;
+            border: 1px solid #555;
+            color: #e0e0e0;
+            border-radius: 4px;
+            padding: 4px 6px;
+        }
+        .neutral-btn {
+            color: white;
+            border: none;
+            padding: 5px 10px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-left: 5px;
+            background: #505050;
+        }
+        .neutral-btn:hover { background: #5a5a5a; }
+        .neutral-btn:disabled {
+            background: #383838;
+            color: #666;
+            cursor: not-allowed;
+        }
+        .msg-input:disabled {
+            background: #1a1a1a;
+            color: #666;
+            cursor: not-allowed;
+        }
+        .page-footer {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: #2d2d2d;
+            padding: 16px;
+            display: flex;
+            gap: 12px;
+            justify-content: space-between;
+            box-shadow: 0 -2px 10px rgba(0,0,0,0.2);
+            z-index: 900;
+        }
+        .status-badge {
+            font-size: 0.75em;
+            margin-left: 8px;
+            padding: 2px 6px;
+            border-radius: 4px;
+            background: #3a3a3a;
+            color: #cccccc;
+            text-transform: lowercase;
+        }
+        .status-badge.online { color: #4CAF50; }
+        .status-badge.offline { color: #f44336; }
+        .title-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 14px;
+        }
+        .title-left {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .title-spacer { flex: 1; }
+        /* Dashboard Tabs & Anarchy Addons / Direct Dispatch Panel */
+        .dashboard-panel {
+            background: #2d2d2d;
+            padding: 16px 20px;
+            border-radius: 8px;
+            margin-top: 16px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        }
+        .panel-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 10px;
+            border-bottom: 1px solid #3f3f3f;
+            padding-bottom: 10px;
+            margin-bottom: 14px;
+        }
+        .panel-header h2 {
+            margin: 0;
+            font-size: 1.2em;
+            color: #ffffff;
+        }
+        .bot-selector {
+            background: #222;
+            color: #fff;
+            border: 1px solid #555;
+            border-radius: 4px;
+            padding: 5px 10px;
+            font-size: 0.9em;
+        }
+        .dispatch-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 10px;
+            margin-bottom: 14px;
+        }
+        .dispatch-btn {
+            background: #1e88e5;
+            color: #fff;
+            border: none;
+            border-radius: 6px;
+            padding: 10px 12px;
+            font-size: 0.95em;
+            font-weight: bold;
+            cursor: pointer;
+            text-align: center;
+            transition: background 0.15s;
+        }
+        .dispatch-btn:hover { background: #1565c0; }
+        .dispatch-btn.lifesteal { background: #e53935; }
+        .dispatch-btn.lifesteal:hover { background: #c62828; }
+        .dispatch-btn.wild { background: #43a047; }
+        .dispatch-btn.wild:hover { background: #2e7d32; }
+        .dispatch-btn.home { background: #8e24aa; }
+        .dispatch-btn.home:hover { background: #6a1b9a; }
+        .live-cmd-box {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+            background: #222;
+            padding: 10px;
+            border-radius: 6px;
+            border: 1px solid #444;
+        }
+        .live-cmd-input {
+            flex: 1;
+            background: #181818;
+            border: 1px solid #555;
+            color: #fff;
+            padding: 8px 10px;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 0.95em;
+        }
+        .addons-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 10px;
+            margin-top: 12px;
+        }
+        .addon-card {
+            background: #363636;
+            padding: 10px 12px;
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        /* Modal styles */
+        .modal-backdrop {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.5);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+        .modal {
+            background: #2d2d2d;
+            border-radius: 8px;
+            width: 80vw;
+            height: 80vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+        }
+        .modal-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 12px 16px;
+            border-bottom: 1px solid #3a3a3a;
+        }
+        .modal-close-btn {
+            background: #f44336;
+            color: #fff;
+            border: none;
+            border-radius: 4px;
+            padding: 4px 8px;
+            cursor: pointer;
+        }
+        .modal-body {
+            flex: 1 1 auto;
+            overflow: auto;
+            padding: 12px 16px;
+        }
+        .modal-footer {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 12px 16px;
+            border-top: 1px solid #3a3a3a;
+        }
+        .footer-left { color: #cccccc; font-style: italic; }
+    </style>
+</head>
+<body>
+    <div class="title-row">
+        <div class="title-left">
+            <h1 style="margin: 0;">Mindcraft</h1>
+            <span id="msStatus" class="status-badge offline">mindserver offline</span>
+        </div>
+        <div class="title-spacer"></div>
+    </div>
+    <div id="agents"></div>
+
+    <!-- Direct Dispatch & Teleport Dock + Anarchy Addons Control Panel (Port 8080 & Port 8092) -->
+    <div class="dashboard-panel" id="directDispatchPanel">
+        <div class="panel-header">
+            <h2>Direct Dispatch &amp; Teleport Dock (Zero Latency / 0 LLM Tokens)</h2>
+            <div>
+                <label for="dispatchTargetBot" style="font-size:0.9em; margin-right:6px;">Target Bot:</label>
+                <select id="dispatchTargetBot" class="bot-selector">
+                    <option value="all">All Connected Bots</option>
+                </select>
+            </div>
+        </div>
+
+        <!-- 1-Click Quick Action Buttons -->
+        <div class="dispatch-grid">
+            <button class="dispatch-btn lifesteal" onclick="dispatchRawCommand('/server lifesteal')">
+                Connect to Lifesteal (/server lifesteal)
+            </button>
+            <button class="dispatch-btn wild" onclick="dispatchRawCommand('/randomtp')">
+                Random TP to Wild (/randomtp)
+            </button>
+            <button class="dispatch-btn home" onclick="dispatchRawCommand('/sethome')">
+                Set Home (/sethome)
+            </button>
+            <button class="dispatch-btn" onclick="dispatchRawCommand('/home')">
+                Return Home (/home)
+            </button>
+        </div>
+
+        <!-- Live Command Input Box -->
+        <div class="live-cmd-box">
+            <span style="font-weight:bold; color:#90caf9;">Live Command:</span>
+            <input
+                type="text"
+                id="liveCommandInput"
+                class="live-cmd-input"
+                placeholder="Type any server command (e.g. /tpa sujal24, /pay, /kit, /server lifesteal)..."
+                onkeydown="if(event.key === 'Enter') sendLiveCommandInput()"
+            >
+            <button class="start-btn" id="sendLiveCommandBtn" onclick="sendLiveCommandInput()" style="padding:8px 16px; font-weight:bold;">
+                Send Command
+            </button>
+        </div>
+        <div id="dispatchStatusText" style="margin-top:6px; font-size:0.85em; color:#81c784; min-height:18px;"></div>
+
+        <!-- Anarchy Addons Quick Actions & Toggles -->
+        <div style="margin-top:16px; border-top:1px solid #3f3f3f; padding-top:12px;">
+            <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px;">
+                <h3 style="margin:0; font-size:1.05em;">Anarchy Addons &amp; Economy Quick Actions</h3>
+                <div style="display:flex; gap:6px; flex-wrap:wrap;">
+                    <button class="neutral-btn" onclick="dispatchAddonAction('shopgui')">Open /shopgui</button>
+                    <button class="neutral-btn" onclick="dispatchAddonAction('sell_all')">Run /sell all</button>
+                    <button class="neutral-btn" onclick="dispatchAddonAction('bal')">Check /bal</button>
+                    <span id="addonTelemetrySummary" style="margin-left:8px; font-size:0.85em; color:#ffd54f;">Balance: $0 | Totems: 0 | Gapples: 0</span>
+                </div>
+            </div>
+            <div class="addons-grid">
+                <label class="addon-card"><span>Auto Totem</span><input type="checkbox" id="addon-auto_totem" onchange="pushAddonConfig()"></label>
+                <label class="addon-card"><span>Auto Gapple</span><input type="checkbox" id="addon-auto_gapple" onchange="pushAddonConfig()"></label>
+                <label class="addon-card"><span>Auto Armor</span><input type="checkbox" id="addon-auto_armor" onchange="pushAddonConfig()"></label>
+                <label class="addon-card"><span>CPS Booster</span><input type="checkbox" id="addon-cps_booster" onchange="pushAddonConfig()"></label>
+                <label class="addon-card"><span>1.9+ Cooldown Mode</span><input type="checkbox" id="addon-cps_cooldown_mode" onchange="pushAddonConfig()"></label>
+                <label class="addon-card"><span>Panic Escape</span><input type="checkbox" id="addon-panic_escape" onchange="pushAddonConfig()"></label>
+                <label class="addon-card"><span>Player Radar</span><input type="checkbox" id="addon-player_radar" onchange="pushAddonConfig()"></label>
+                <label class="addon-card"><span>Auto Loot</span><input type="checkbox" id="addon-auto_loot" onchange="pushAddonConfig()"></label>
+                <label class="addon-card"><span>ShopGUI &amp; Auto-Sell</span><input type="checkbox" id="addon-shop_gui" onchange="pushAddonConfig()"></label>
+            </div>
+        </div>
+    </div>
+
+    <div class="page-footer">
+        <div>
+            <button id="openCreateAgentBtn" class="start-btn">New Agent</button>
+        </div>
+        <div style="display:flex; gap:12px;">
+            <button class="stop-btn" onclick="disconnectAllAgents()">Disconnect All Agents</button>
+            <button class="stop-btn" onclick="confirmShutdown()">Full Shutdown</button>
+        </div>
+    </div>
+
+    <!-- Modal -->
+    <div id="createAgentModal" class="modal-backdrop">
+        <div class="modal">
+            <div class="modal-header">
+                <h2 style="margin:0;">Create Agent</h2>
+                <button id="closeCreateAgentBtn" class="modal-close-btn">Close</button>
+            </div>
+            <div class="modal-body">
+                <div id="createAgentSection">
+                    <div id="profileStatus" style="margin:6px 0;">Profile: Not uploaded</div>
+                    <div id="settingsForm"></div>
+                    <div id="createError" style="color:#f44336;margin-top:10px;"></div>
+                    <input type="file" id="profileFileInput" accept=".json,application/json" style="display:none">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <div class="footer-left" id="footerStatus">Configure settings, then upload a profile and create the agent.</div>
+                <div class="footer-actions">
+                    <button id="uploadProfileBtn" class="start-btn">Upload Profile</button>
+                    <button id="submitCreateAgentBtn" class="start-btn" disabled>Create Agent</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Agent Settings Modal -->
+    <div id="agentSettingsModal" class="modal-backdrop">
+        <div class="modal">
+            <div class="modal-header">
+                <h2 id="agentSettingsTitle" style="margin:0;">Agent Settings</h2>
+                <button id="closeAgentSettingsBtn" class="modal-close-btn">Close</button>
+            </div>
+            <div class="modal-body">
+                <div id="agentSettingsSection">
+                    <div id="agentSettingsForm"></div>
+                    <div id="agentSettingsError" style="color:#f44336;margin-top:10px;"></div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <div class="footer-left" id="agentSettingsFooter">Modify settings then apply to restart the agent.</div>
+                <div class="footer-actions">
+                    <button id="discardAgentSettingsBtn" class="stop-btn" style="background:#777;">Discard Changes</button>
+                    <button id="applyAgentSettingsBtn" class="start-btn" disabled>Apply & Restart</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // When MindServer is exposed beyond loopback, the launcher's URL carries
+        // the token in the fragment so it is not sent in the request or referrer.
+        // The query form is still accepted for manually built links.
+        const urlToken = new URLSearchParams(window.location.hash.replace(/^#/, '')).get('token')
+            || new URLSearchParams(window.location.search).get('token')
+            || '';
+        const socket = io({
+            path: window.location.pathname + 'socket.io',
+            auth: urlToken ? { token: urlToken } : {}
+        })
+        const agentsDiv = document.getElementById('agents');
+        let settingsSpec = {};
+        let profileData = null;
+        const agentSettings = {};
+        const agentLastMessage = {};
+        const inventoryOpen = {};
+        let currentAgents = [];
+
+        const statusEl = document.getElementById('msStatus');
+        function updateStatus(connected) {
+            if (!statusEl) return;
+            if (connected) {
+                statusEl.textContent = 'MindServer online';
+                statusEl.classList.remove('offline');
+                statusEl.classList.add('online');
+            } else {
+                statusEl.textContent = 'MindServer offline';
+                statusEl.classList.remove('online');
+                statusEl.classList.add('offline');
+            }
+        }
+        function subscribeToState() {
+            socket.emit('listen-to-agents');
+        }
+        // Initial status
+        updateStatus(false);
+        socket.on('connect', () => {
+            updateStatus(true);
+            subscribeToState();
+            Object.keys(agentSettings).forEach(name => delete agentSettings[name]);
+        });
+        socket.on('disconnect', () => {
+            updateStatus(false);
+        });
+        socket.on('connect_error', () => {
+            updateStatus(false);
+        });
+
+        // Direct Command Dispatcher & Addon Socket.IO handlers
+        function getSelectedDispatchBot() {
+            const sel = document.getElementById('dispatchTargetBot');
+            return sel ? sel.value : 'all';
+        }
+
+        function updateBotSelector(agents) {
+            const sel = document.getElementById('dispatchTargetBot');
+            if (!sel) return;
+            const prev = sel.value;
+            const options = ['<option value="all">All Connected Bots</option>'];
+            (agents || []).forEach(a => {
+                options.push(`<option value="${a.name}">${a.name}${a.in_game ? ' (online)' : ' (offline)'}</option>`);
+            });
+            sel.innerHTML = options.join('');
+            if (prev && (prev === 'all' || (agents || []).some(a => a.name === prev))) {
+                sel.value = prev;
+            } else if (agents && agents.length === 1) {
+                sel.value = agents[0].name;
+            }
+        }
+
+        function dispatchRawCommand(command, explicitAgentName) {
+            if (!command || !command.trim()) return;
+            const target = explicitAgentName || getSelectedDispatchBot();
+            const formatted = command.trim().startsWith('/') ? command.trim() : '/' + command.trim();
+            socket.emit('direct-command', target, { agentName: target, command: formatted });
+            const statusEl = document.getElementById('dispatchStatusText');
+            if (statusEl) {
+                statusEl.textContent = `Dispatched "${formatted}" to ${target} at ${new Date().toLocaleTimeString()}`;
+            }
+        }
+        window.dispatchRawCommand = dispatchRawCommand;
+
+        function sendLiveCommandInput() {
+            const input = document.getElementById('liveCommandInput');
+            if (!input || !input.value.trim()) return;
+            dispatchRawCommand(input.value.trim());
+            input.value = '';
+        }
+        window.sendLiveCommandInput = sendLiveCommandInput;
+
+        function sendAgentDirectCommand(agentName) {
+            const input = document.getElementById(`directCmdInput-${agentName}`);
+            if (!input || !input.value.trim()) return;
+            dispatchRawCommand(input.value.trim(), agentName);
+            input.value = '';
+        }
+        window.sendAgentDirectCommand = sendAgentDirectCommand;
+
+        function dispatchAddonAction(actionName) {
+            const target = getSelectedDispatchBot();
+            socket.emit('addons-action', target, { agentName: target, action: actionName });
+            const statusEl = document.getElementById('dispatchStatusText');
+            if (statusEl) {
+                statusEl.textContent = `Executed addon action "${actionName}" on ${target}`;
+            }
+        }
+        window.dispatchAddonAction = dispatchAddonAction;
+
+        function pushAddonConfig() {
+            const target = getSelectedDispatchBot();
+            const keys = ['auto_totem', 'auto_gapple', 'auto_armor', 'cps_booster', 'cps_cooldown_mode', 'panic_escape', 'player_radar', 'auto_loot', 'shop_gui'];
+            const cfg = {};
+            keys.forEach(k => {
+                const el = document.getElementById(`addon-${k}`);
+                if (el) cfg[k] = el.checked;
+            });
+            cfg.auto_sell = Boolean(cfg.shop_gui);
+            socket.emit('addons-config', target, cfg);
+        }
+        window.pushAddonConfig = pushAddonConfig;
+
+        socket.on('addons-live', (agentName, telemetry) => {
+            if (!telemetry) return;
+            const summaryEl = document.getElementById('addonTelemetrySummary');
+            if (summaryEl) {
+                summaryEl.textContent = `[${agentName}] Balance: ${telemetry.balance || '$0'} | Totems: ${telemetry.totems ?? 0} | Gapples: ${(telemetry.gapples ?? 0) + (telemetry.egapples ?? 0)}`;
+            }
+            if (telemetry.config) {
+                Object.entries(telemetry.config).forEach(([k, val]) => {
+                    const cb = document.getElementById(`addon-${k}`);
+                    if (cb && typeof val === 'boolean') cb.checked = val;
+                });
+            }
+        });
+
+        fetch('/settings_spec.json')
+            .then(r => r.json())
+            .then(spec => {
+                settingsSpec = spec;
+                buildSettingsForm();
+            });
+
+        function buildSettingsForm() {
+            const form = document.getElementById('settingsForm');
+            form.innerHTML = '';
+            form.style.display = 'grid';
+            form.style.gridTemplateColumns = 'repeat(auto-fit, minmax(320px, 1fr))';
+            form.style.gap = '8px';
+            Object.keys(settingsSpec).forEach(key => {
+                if (key === 'profile') return;
+                const cfg = settingsSpec[key];
+                const wrapper = document.createElement('div');
+                wrapper.className = 'setting-wrapper';
+                const label = document.createElement('label');
+                label.textContent = key;
+                label.title = cfg.description || '';
+                let input;
+                switch (cfg.type) {
+                    case 'boolean':
+                        input = document.createElement('input');
+                        input.type = 'checkbox';
+                        input.checked = cfg.default === true;
+                        break;
+                    case 'number':
+                        input = document.createElement('input');
+                        input.type = 'number';
+                        input.value = cfg.default;
+                        break;
+                    case 'array':
+                    case 'object': {
+                        input = document.createElement('textarea');
+                        input.className = 'setting-json-input';
+                        input.rows = key === 'task' ? 5 : 3;
+                        input.value = JSON.stringify(cfg.default, null, 2) ?? 'null';
+                        wrapper.classList.add('setting-json-wrapper');
+                        break;
+                    }
+                    default:
+                        input = document.createElement('input');
+                        input.type = 'text';
+                        input.value = cfg.default ?? '';
+                }
+                input.title = cfg.description || '';
+                input.id = `setting-${key}`;
+                wrapper.appendChild(label);
+                wrapper.appendChild(input);
+                form.appendChild(wrapper);
+            });
+        }
+
+        function readSettingInput(input, type, key) {
+            if (type === 'boolean') return input.checked;
+            if (type === 'number') {
+                const raw = input.value.trim();
+                const value = Number(raw);
+                if (!raw || !Number.isFinite(value)) {
+                    throw new Error(key + ' must be a valid number.');
+                }
+                return value;
+            }
+            if (type === 'array' || type === 'object') {
+                let value;
+                const raw = input.value.trim();
+                // Object settings such as `task` are nullable; an empty field
+                // means no task, matching the documented null default.
+                if (type === 'object' && raw === '') return null;
+                try {
+                    value = JSON.parse(raw);
+                } catch (error) {
+                    throw new Error(key + ' must contain valid JSON.');
+                }
+                if (type === 'array' && !Array.isArray(value)) {
+                    throw new Error(key + ' must be a JSON array.');
+                }
+                if (type === 'object' && value !== null &&
+                    (typeof value !== 'object' || Array.isArray(value))) {
+                    throw new Error(key + ' must be a JSON object or null.');
+                }
+                return value;
+            }
+            return input.value;
+        }
+
+        document.getElementById('uploadProfileBtn').addEventListener('click', () => {
+            document.getElementById('profileFileInput').click();
+        });
+
+        document.getElementById('profileFileInput').addEventListener('change', e => {
+            const file = e.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = ev => {
+                try {
+                    profileData = JSON.parse(ev.target.result);
+                    document.getElementById('submitCreateAgentBtn').disabled = false;
+                    document.getElementById('profileStatus').textContent = `Profile: ${profileData.name || 'Uploaded'}`;
+                    document.getElementById('createError').textContent = '';
+                } catch (err) {
+                    document.getElementById('createError').textContent = 'Invalid profile JSON: ' + err.message;
+                    profileData = null;
+                    document.getElementById('submitCreateAgentBtn').disabled = true;
+                    document.getElementById('profileStatus').textContent = 'Profile: Not uploaded';
+                }
+            };
+            reader.readAsText(file);
+            e.target.value = '';
+        });
+
+        document.getElementById('submitCreateAgentBtn').addEventListener('click', () => {
+            if (!profileData) return;
+            const settings = { profile: profileData };
+            try {
+                Object.keys(settingsSpec).forEach(key => {
+                    if (key === 'profile') return;
+                    const input = document.getElementById('setting-' + key);
+                    if (input) settings[key] = readSettingInput(input, settingsSpec[key].type, key);
+                });
+            } catch (error) {
+                document.getElementById('createError').textContent = error.message;
+                return;
+            }
+            document.getElementById('createError').textContent = '';
+            socket.emit('create-agent', settings, res => {
+                if (!res.success) {
+                    document.getElementById('createError').textContent = res.error || 'Unknown error';
+                } else {
+                    profileData = null;
+                    document.getElementById('submitCreateAgentBtn').disabled = true;
+                    document.getElementById('profileStatus').textContent = 'Profile: Not uploaded';
+                    document.getElementById('createError').textContent = '';
+                    hideCreateAgentModal();
+                }
+            });
+        });
+
+        // Modal open/close logic
+        const modalBackdrop = document.getElementById('createAgentModal');
+        document.getElementById('openCreateAgentBtn').addEventListener('click', () => {
+            buildSettingsForm();
+            modalBackdrop.style.display = 'flex';
+        });
+        function hideCreateAgentModal() {
+            modalBackdrop.style.display = 'none';
+        }
+        document.getElementById('closeCreateAgentBtn').addEventListener('click', hideCreateAgentModal);
+
+        socket.on('bot-output', (agentName, message) => {
+            agentLastMessage[agentName] = message;
+            const messageDiv = document.getElementById(`lastMessage-${agentName}`);
+            if (messageDiv) {
+                messageDiv.textContent = message;
+            }
+        });
+
+        // Subscribe to aggregated state updates (re-sent on each connect)
+        socket.on('state-update', (states) => {
+            window.lastStates = states;
+            Object.keys(states || {}).forEach(name => {
+                const st = states[name];
+                const healthEl = document.getElementById(`health-${name}`);
+                if (st && !st.error) {
+                    const gp = st.gameplay || {};
+                    if (healthEl && typeof gp.health === 'number') {
+                        const hMax = typeof gp.healthMax === 'number' ? gp.healthMax : 20;
+                        healthEl.textContent = `health: ${gp.health}/${hMax}`;
+                    }
+                    const posEl = document.getElementById(`pos-${name}`);
+                    const hunEl = document.getElementById(`hunger-${name}`);
+                    const bioEl = document.getElementById(`biome-${name}`);
+                    const modeEl = document.getElementById(`mode-${name}`);
+                    const itemsEl = document.getElementById(`items-${name}`);
+                    const equippedEl = document.getElementById(`equipped-${name}`);
+                    const invGrid = document.getElementById(`inventory-${name}`);
+                    const actionEl = document.getElementById(`action-${name}`);
+                    if (posEl && gp.position) {
+                        const p = gp.position;
+                        posEl.textContent = `x ${p.x}, y ${p.y}, z ${p.z}`;
+                    }
+                    if (hunEl && typeof gp.hunger === 'number') {
+                        const fMax = typeof gp.hungerMax === 'number' ? gp.hungerMax : 20;
+                        hunEl.textContent = `hunger: ${gp.hunger}/${fMax}`;
+                    }
+                    if (bioEl && gp.biome) bioEl.textContent = `biome: ${gp.biome}`;
+                    if (modeEl && gp.gamemode) modeEl.textContent = `gamemode: ${gp.gamemode}`;
+                    if (itemsEl && st.inventory) {
+                        const used = st.inventory.stacksUsed ?? 0;
+                        const total = st.inventory.totalSlots ?? 0;
+                        itemsEl.textContent = `inventory slots: ${used}/${total}`;
+                    }
+                    if (equippedEl && st.inventory?.equipment) {
+                        const e = st.inventory.equipment;
+                        equippedEl.textContent = `equipped: ${e.mainHand || 'none'}`;
+                    }
+                    const armorEl = document.getElementById(`armor-${name}`);
+                    if (armorEl && st.inventory?.equipment) {
+                        const e = st.inventory.equipment;
+                        const armor = [];
+                        if (e.helmet) armor.push(`head: ${e.helmet}`);
+                        if (e.chestplate) armor.push(`chest: ${e.chestplate}`);
+                        if (e.leggings) armor.push(`legs: ${e.leggings}`);
+                        if (e.boots) armor.push(`feet: ${e.boots}`);
+                        armorEl.textContent = `armor: ${armor.length ? armor.join(', ') : 'none'}`;
+                    }
+                    if (actionEl && st.action) {
+                        actionEl.textContent = `${st.action.current || 'Idle'}`;
+                    }
+                    if (invGrid && st.inventory?.counts) {
+                        const counts = st.inventory.counts;
+                        invGrid.innerHTML = Object.keys(counts).length ?
+                            Object.entries(counts).map(([k, v]) => `<div class="cell">${k}: ${v}</div>`).join('') :
+                            '<div class="cell">(empty)</div>';
+                    }
+                }
+            });
+        });
+
+        function fetchAgentSettings(name) {
+            return new Promise((resolve) => {
+                if (agentSettings[name]) { resolve(agentSettings[name]); return; }
+                const timeout = setTimeout(() => resolve(null), 4000);
+                socket.emit('get-settings', name, res => {
+                    clearTimeout(timeout);
+                    if (res.settings) {
+                        agentSettings[name] = res.settings;
+                        resolve(res.settings);
+                    } else resolve(null);
+                });
+            });
+        }
+
+        // Agent settings modal logic
+        const agentSettingsModal = document.getElementById('agentSettingsModal');
+        const agentSettingsForm = document.getElementById('agentSettingsForm');
+        const applyBtn = document.getElementById('applyAgentSettingsBtn');
+        const discardBtn = document.getElementById('discardAgentSettingsBtn');
+        const closeAgentSettingsBtn = document.getElementById('closeAgentSettingsBtn');
+        const agentSettingsTitle = document.getElementById('agentSettingsTitle');
+        let currentAgentName = null;
+        let originalAgentSettings = null;
+
+        function buildAgentSettingsForm(settings) {
+            agentSettingsForm.innerHTML = '';
+            agentSettingsForm.style.display = 'grid';
+            agentSettingsForm.style.gridTemplateColumns = 'repeat(auto-fit, minmax(320px, 1fr))';
+            agentSettingsForm.style.gap = '8px';
+            Object.keys(settingsSpec).forEach(key => {
+                if (key === 'profile') return;
+                const cfg = settingsSpec[key];
+                const wrapper = document.createElement('div');
+                wrapper.className = 'setting-wrapper';
+                const label = document.createElement('label');
+                label.textContent = key;
+                label.title = cfg.description || '';
+                let input;
+                switch (cfg.type) {
+                    case 'boolean':
+                        input = document.createElement('input');
+                        input.type = 'checkbox';
+                        input.checked = Boolean(settings[key]);
+                        break;
+                    case 'number':
+                        input = document.createElement('input');
+                        input.type = 'number';
+                        input.value = settings[key] ?? cfg.default ?? 0;
+                        break;
+                    case 'array':
+                    case 'object': {
+                        input = document.createElement('textarea');
+                        input.className = 'setting-json-input';
+                        input.rows = key === 'task' ? 5 : 3;
+                        const initial = Object.prototype.hasOwnProperty.call(settings, key)
+                            ? settings[key]
+                            : cfg.default;
+                        input.value = JSON.stringify(initial, null, 2) ?? (cfg.type === 'array' ? '[]' : 'null');
+                        wrapper.classList.add('setting-json-wrapper');
+                        break;
+                    }
+                    default:
+                        input = document.createElement('input');
+                        input.type = 'text';
+                        const defVal = settings[key] ?? cfg.default ?? '';
+                        input.value = defVal;
+                }
+                input.id = `agent-setting-${key}`;
+                input.addEventListener('input', onAgentSettingsChanged);
+                if (input.type === 'checkbox') input.addEventListener('change', onAgentSettingsChanged);
+                wrapper.appendChild(label);
+                wrapper.appendChild(input);
+                agentSettingsForm.appendChild(wrapper);
+            });
+            onAgentSettingsChanged();
+        }
+
+        function openAgentSettings(name) {
+            currentAgentName = name;
+            agentSettingsTitle.textContent = `${name} Settings`;
+            fetchAgentSettings(name).then(settings => {
+                originalAgentSettings = JSON.parse(JSON.stringify(settings || {}));
+                buildAgentSettingsForm(settings || {});
+                agentSettingsModal.style.display = 'flex';
+            });
+        }
+        window.openAgentSettings = openAgentSettings;
+
+        function getEditedAgentSettings() {
+            const newSettings = { profile: (originalAgentSettings && originalAgentSettings.profile) || {} };
+            Object.keys(settingsSpec).forEach(key => {
+                if (key === 'profile') return;
+                const cfg = settingsSpec[key];
+                const input = document.getElementById('agent-setting-' + key);
+                if (!input) return;
+                newSettings[key] = readSettingInput(input, cfg.type, key);
+            });
+            return newSettings;
+        }
+
+        function shallowEqual(a, b) {
+            if (!a || !b) return false;
+            const keys = Object.keys(settingsSpec).filter(k => k !== 'profile');
+            for (const k of keys) {
+                const va = a[k];
+                const vb = b[k];
+                if (typeof va === 'object' || typeof vb === 'object') {
+                    if (JSON.stringify(va) !== JSON.stringify(vb)) return false;
+                } else if (va !== vb) return false;
+            }
+            return true;
+        }
+
+        function onAgentSettingsChanged() {
+            if (!originalAgentSettings) { applyBtn.disabled = true; return; }
+            try {
+                const edited = getEditedAgentSettings();
+                document.getElementById('agentSettingsError').textContent = '';
+                applyBtn.disabled = shallowEqual(edited, originalAgentSettings);
+            } catch (error) {
+                document.getElementById('agentSettingsError').textContent = error.message;
+                applyBtn.disabled = true;
+            }
+        }
+
+        function closeAgentSettings() {
+            agentSettingsModal.style.display = 'none';
+            currentAgentName = null;
+            originalAgentSettings = null;
+        }
+
+        function updateAgentViewer(name) {
+            const agentEl = document.getElementById(`agent-${name}`);
+            if (!agentEl) return;
+
+            const settings = agentSettings[name];
+            const viewerContainer = agentEl.querySelector('.agent-view-container');
+            if (!viewerContainer) return;
+
+            const agentState = currentAgents.find(a => a.name === name);
+            const shouldShow = agentState?.in_game && settings?.render_bot_view === true;
+            viewerContainer.parentElement.style.display = shouldShow ? '' : 'none';
+            const iframe = viewerContainer.querySelector('.agent-viewer');
+            if (shouldShow && iframe && agentState?.viewerPort) {
+                const viewerURL = 'http://' + window.location.hostname + ':' + agentState.viewerPort + '/';
+                if (iframe.src !== viewerURL) iframe.src = viewerURL;
+            }
+        }
+
+        discardBtn.addEventListener('click', () => {
+            if (!currentAgentName || !originalAgentSettings) return;
+            buildAgentSettingsForm(originalAgentSettings);
+        });
+
+        applyBtn.addEventListener('click', () => {
+            if (!currentAgentName) return;
+            let edited;
+            try {
+                edited = getEditedAgentSettings();
+            } catch (error) {
+                document.getElementById('agentSettingsError').textContent = error.message;
+                return;
+            }
+            socket.emit('set-agent-settings', currentAgentName, edited);
+            agentSettings[currentAgentName] = { ...edited, fetched: true };
+            updateAgentViewer(currentAgentName);
+            closeAgentSettings();
+        });
+
+        closeAgentSettingsBtn.addEventListener('click', closeAgentSettings);
+
+
+        function renderAgentCard(agent) {
+            const cfg = agentSettings[agent.name] || {};
+            const viewerPort = Number(agent.viewerPort || 0);
+            const showViewer = agent.in_game && cfg.render_bot_view === true && viewerPort > 0;
+            const viewerHost = window.location.hostname || 'localhost';
+            const viewerHTML = showViewer ? `<div class="agent-view-container"><iframe class="agent-viewer" id="viewer-${agent.name}" src="http://${viewerHost}:${viewerPort}/"></iframe></div>` : '';
+            const lastMessage = agentLastMessage[agent.name] || '';
+            const invOpen = inventoryOpen[agent.name] === true;
+            const invStyle = invOpen ? '' : 'display:none;';
+            return `
+                    <div class="agent" id="agent-${agent.name}">
+                        <div class="agent-grid">
+                            <div class="cell title" style="grid-column: 1 / -1; display:flex; align-items:center; justify-content:space-between;">
+                                <span><span class="status-icon ${agent.in_game ? 'online' : 'offline'}">●</span>${agent.name}${agent.socket_connected && !agent.in_game ? '<span style="margin-left:6px;color:#f0ad4e;">joining...</span>' : ''}
+                                    <button class="gear-btn" title="Settings" onclick="openAgentSettings('${agent.name}')">⚙</button>
+                                    <button class="gear-btn" title="Inventory" onclick="toggleDetails('${agent.name}')">Inventory</button>
+                                </span>
+                            </div>
+                            ${showViewer ? `<div class="cell" style="grid-row: span 3; padding:0;">${viewerHTML}</div>` : ''}
+                            <div class="cell" id="action-${agent.name}">action: -</div>
+                            <div class="cell" id="mode-${agent.name}">gamemode: -</div>
+                            <div class="cell" id="health-${agent.name}">health: -</div>
+                            <div class="cell" id="hunger-${agent.name}">hunger: -</div>
+                            <div class="cell" id="pos-${agent.name}">pos: -</div>
+                            <div class="cell" id="biome-${agent.name}">biome: -</div>
+                            <div class="cell" id="items-${agent.name}">inventory slots: -</div>
+                            <div class="cell" id="equipped-${agent.name}">equipped: -</div>
+                            <div class="agent-inventory" id="inventorySection-${agent.name}" style="${invStyle} grid-column: 1 / -1;">
+                                <h3>Inventory</h3>
+                                <div class="cell" id="armor-${agent.name}" style="margin-bottom: 8px;">armor: -</div>
+                                <div class="inventory-grid" id="inventory-${agent.name}"></div>
+                            </div>
+                            <div id="lastMessage-${agent.name}" class="last-message" style="grid-column: 1 / -1;"><strong>Last Message:</strong> ${lastMessage}</div>
+                        </div>
+                        <div class="controls-row">
+                            <button class="start-btn" id="sendBtn-${agent.name}" disabled onclick="sendMessage('${agent.name}', document.getElementById('messageInput-${agent.name}').value)">Send</button>
+                            <input class="msg-input" type="text" id="messageInput-${agent.name}" placeholder="Enter message..." 
+                                oninput="onMsgInputChange('${agent.name}')"
+                                onkeydown="if(event.key === 'Enter') document.getElementById('sendBtn-${agent.name}').click()"
+                                ${!agent.in_game ? 'disabled' : ''}>
+                            <button class="neutral-btn" onclick="sendMessage('${agent.name}', '!stop')" ${!agent.in_game ? 'disabled' : ''}>Stop Action</button>
+                            <button class="neutral-btn" onclick="sendMessage('${agent.name}', '!stay(-1)')" ${!agent.in_game ? 'disabled' : ''}>Stay Still</button>
+                            <button class="neutral-btn" onclick="restartAgent('${agent.name}')" ${!agent.in_game ? 'disabled' : ''}>Restart</button>
+                            <button class="neutral-btn" ${agent.in_game ? `onclick=\"disconnectAgent('${agent.name}')\"` : (agent.socket_connected ? 'disabled' : `onclick=\"startAgent('${agent.name}')\"`)}>${agent.in_game ? 'Disconnect' : (agent.socket_connected ? 'Connecting...' : 'Connect')}</button>
+                            <button class="stop-btn" onclick="destroyAgent('${agent.name}')">Remove</button>
+                        </div>
+                        <div class="direct-cmd-row">
+                            <span class="direct-cmd-label">Direct Dispatch:</span>
+                            <button class="quick-tp-btn" onclick="dispatchRawCommand('/server lifesteal', '${agent.name}')" ${!agent.in_game ? 'disabled' : ''}>/server lifesteal</button>
+                            <button class="quick-tp-btn" onclick="dispatchRawCommand('/randomtp', '${agent.name}')" ${!agent.in_game ? 'disabled' : ''}>/randomtp</button>
+                            <button class="quick-tp-btn" onclick="dispatchRawCommand('/sethome', '${agent.name}')" ${!agent.in_game ? 'disabled' : ''}>/sethome</button>
+                            <button class="quick-tp-btn" onclick="dispatchRawCommand('/home', '${agent.name}')" ${!agent.in_game ? 'disabled' : ''}>/home</button>
+                            <input class="msg-input" style="flex:1; min-width:160px; font-family:monospace;" type="text" id="directCmdInput-${agent.name}" placeholder="Raw command (e.g. /tpa sujal24, /pay, /kit)..."
+                                onkeydown="if(event.key === 'Enter') sendAgentDirectCommand('${agent.name}')"
+                                ${!agent.in_game ? 'disabled' : ''}>
+                            <button class="start-btn" onclick="sendAgentDirectCommand('${agent.name}')" ${!agent.in_game ? 'disabled' : ''}>Send Command</button>
+                        </div>
+                    </div>`;
+        }
+
+        function setConnectButtonId(name) {
+            const card = document.getElementById('agent-' + name);
+            if (!card) return;
+            const buttons = card.querySelectorAll('.controls-row button');
+            const connectButton = buttons[buttons.length - 2];
+            if (connectButton) connectButton.id = 'connectBtn-' + name;
+        }
+
+        socket.on('agents-status', async (agents) => {
+            updateBotSelector(agents);
+            const needSettings = agents.filter(a => !agentSettings[a.name]);
+            if (needSettings.length > 0) {
+                await Promise.all(needSettings.map(async (a) => {
+                    const settings = await fetchAgentSettings(a.name);
+                    if (settings) {
+                        agentSettings[a.name] = settings;
+                    }
+                }));
+            }
+
+            const prevAgents = currentAgents.reduce((acc, a) => ({ ...acc, [a.name]: a }), {});
+            const changedAgents = agents.filter(a => {
+                const prev = prevAgents[a.name];
+                return !prev || prev.in_game !== a.in_game || prev.viewerPort !== a.viewerPort || prev.socket_connected !== a.socket_connected;
+            });
+
+            currentAgents = agents;
+
+            if (!agentsDiv.children.length) {
+                agentsDiv.innerHTML = agents.map(agent => renderAgentCard(agent)).join('');
+                agents.forEach(agent => setConnectButtonId(agent.name));
+                setTimeout(() => {
+                    agents.forEach(a => {
+                        if (a.in_game) updateAgentViewer(a.name);
+                    });
+                }, 0);
+                return;
+            }
+
+            changedAgents.forEach(agent => {
+                const el = document.getElementById(`agent-${agent.name}`);
+                if (el) {
+                    const messageInput = document.getElementById('messageInput-' + agent.name);
+                    const directInput = document.getElementById('directCmdInput-' + agent.name);
+                    const messageValue = messageInput ? messageInput.value : '';
+                    const directValue = directInput ? directInput.value : '';
+                    const focusedInputId = document.activeElement?.id;
+                    el.outerHTML = renderAgentCard(agent);
+                    setConnectButtonId(agent.name);
+                    const nextMessageInput = document.getElementById('messageInput-' + agent.name);
+                    const nextDirectInput = document.getElementById('directCmdInput-' + agent.name);
+                    if (nextMessageInput) nextMessageInput.value = messageValue;
+                    if (nextDirectInput) nextDirectInput.value = directValue;
+                    onMsgInputChange(agent.name);
+                    if (focusedInputId) document.getElementById(focusedInputId)?.focus();
+                    if (agent.in_game) updateAgentViewer(agent.name);
+                } else {
+                    agentsDiv.insertAdjacentHTML('beforeend', renderAgentCard(agent));
+                    setConnectButtonId(agent.name);
+                    if (agent.in_game) updateAgentViewer(agent.name);
+                }
+            });
+
+            Array.from(agentsDiv.children).forEach(el => {
+                const name = el.id.replace('agent-', '');
+                if (!agents.find(a => a.name === name)) {
+                    el.remove();
+                    delete inventoryOpen[name];
+                }
+            });
+        });
+
+        function restartAgent(n) { socket.emit('restart-agent', n); }
+        function disconnectAgent(n) { socket.emit('stop-agent', n); }
+        function startAgent(n) { 
+            const btn = document.getElementById('connectBtn-' + n);
+            if (btn) {
+                btn.textContent = 'Connecting...';
+                btn.disabled = true;
+                setTimeout(() => {
+                    const retryBtn = document.getElementById('connectBtn-' + n);
+                    const agentState = currentAgents.find(a => a.name === n);
+                    const stillWaiting = agentState ? (!agentState.in_game && !agentState.socket_connected) : true;
+                    if (retryBtn && stillWaiting) {
+                        retryBtn.disabled = false;
+                        retryBtn.textContent = 'Connect';
+                    }
+                }, 10000);
+            }
+            socket.emit('start-agent', n);
+        }
+        function stopAgent(n) { socket.emit('stop-agent', n); }
+        function destroyAgent(n) { socket.emit('destroy-agent', n); }
+        function disconnectAllAgents() { 
+            socket.emit('stop-all-agents'); 
+        }
+        function confirmShutdown() {
+            if (confirm('Are you sure you want to perform a full shutdown?\nThis will stop all agents and close the server.')) {
+                socket.emit('shutdown');
+            }
+        }
+        function sendMessage(n, m) {
+            if (!m || !m.trim()) return;
+            socket.emit('send-message', n, { from: 'ADMIN', message: m });
+            const input = document.getElementById(`messageInput-${n}`);
+            const btn = document.getElementById(`sendBtn-${n}`);
+            if (input) input.value = '';
+            if (btn) btn.disabled = true;
+        }
+        function onMsgInputChange(name) {
+            const input = document.getElementById(`messageInput-${name}`);
+            const btn = document.getElementById(`sendBtn-${name}`);
+            if (btn && input) {
+                btn.disabled = !(input.value && input.value.trim().length > 0);
+            }
+        }
+
+        function toggleDetails(name) {
+            const invSection = document.getElementById(`inventorySection-${name}`);
+            if (!invSection) return;
+            const visible = invSection.style.display !== 'none';
+            const newVisible = !visible;
+            invSection.style.display = newVisible ? '' : 'none';
+            inventoryOpen[name] = newVisible;
+        }
+        window.toggleDetails = toggleDetails;
+    </script>
+</body>
+</html>

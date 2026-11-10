@@ -1,0 +1,12 @@
+{
+  "auto_totem": false,
+  "auto_gapple": false,
+  "auto_armor": false,
+  "cps_booster": false,
+  "cps_value": 12,
+  "panic_escape": false,
+  "player_radar": false,
+  "auto_loot": false,
+  "shop_gui": false,
+  "auto_sell": false
+}

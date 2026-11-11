@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { cx } from "../utils/cx";
+import { cn } from "../utils/cn";
 
 export type Column<T> = {
   key: string;
@@ -17,33 +17,25 @@ type TableProps<T> = {
   empty?: ReactNode;
   label: string;
   className?: string;
-  compact?: boolean;
-  fixed?: boolean;
-  rowClassName?: (row: T) => string | undefined;
 };
 
-export function Table<T>({
-  columns,
-  rows,
-  rowKey,
-  empty = "Nothing to show yet.",
-  label,
-  className,
-  compact,
-  fixed,
-  rowClassName,
-}: TableProps<T>) {
+/** Quiet data table used for saved-versus-live comparisons. */
+export function Table<T>({ columns, rows, rowKey, empty = "Nothing to show yet.", label, className }: TableProps<T>) {
   return (
-    <div className="table-wrap">
-      <table className={cx("table", compact && "table--compact", fixed && "table--fixed", className)}>
+    <div className="overflow-x-auto">
+      <table className={cn("w-full border-collapse text-left text-[12px]", className)}>
         <caption className="sr-only">{label}</caption>
         <thead>
-          <tr>
+          <tr className="border-b border-line">
             {columns.map((column) => (
               <th
                 key={column.key}
                 scope="col"
-                className={cx(column.numeric && "num", column.hideBelow === "sm" && "col-hide-sm")}
+                className={cn(
+                  "eyebrow px-5 py-2 font-medium",
+                  column.numeric && "text-right",
+                  column.hideBelow === "sm" && "max-sm:hidden",
+                )}
                 style={column.width ? { width: column.width } : undefined}
               >
                 {column.header}
@@ -53,14 +45,19 @@ export function Table<T>({
         </thead>
         <tbody>
           {rows.length === 0 ? (
-            <tr className="table__empty">
-              <td colSpan={columns.length}>{empty}</td>
+            <tr>
+              <td colSpan={columns.length} className="px-5 py-6 text-center text-[12px] text-mute">
+                {empty}
+              </td>
             </tr>
           ) : (
             rows.map((row, index) => (
-              <tr key={rowKey(row, index)} className={rowClassName?.(row)}>
+              <tr key={rowKey(row, index)} className="border-b border-line transition-colors last:border-0 hover:bg-panel-2/40">
                 {columns.map((column) => (
-                  <td key={column.key} className={cx(column.numeric && "num", column.hideBelow === "sm" && "col-hide-sm")}>
+                  <td
+                    key={column.key}
+                    className={cn("px-5 py-2.5 align-middle", column.numeric && "text-right", column.hideBelow === "sm" && "max-sm:hidden")}
+                  >
                     {column.render(row, index)}
                   </td>
                 ))}

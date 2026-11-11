@@ -4,7 +4,7 @@ export const IS_MAC =
   typeof navigator !== "undefined" &&
   MAC_PLATFORM.test(navigator.platform || navigator.userAgent || "");
 
-/** The modifier glyph/label that matches the host the dashboard is running on. */
+/** The modifier glyph/label that matches the host the dashboard runs on. */
 export const MOD_LABEL = IS_MAC ? "⌘" : "Ctrl";
 
 /** Render a shortcut for display, keeping "Ctrl" as one keycap on Windows/Linux. */

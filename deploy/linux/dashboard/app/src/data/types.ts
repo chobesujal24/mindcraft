@@ -79,6 +79,7 @@ export type GrindJob = {
   createdAt: number;
   updatedAt: number;
   startedAt?: number;
+  finishedAt?: number;
   message?: string;
   radius?: number;
   deposit?: string;

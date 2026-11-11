@@ -21,8 +21,8 @@ function normalise(event: KeyboardEvent): string {
 
 /**
  * Tiny sequence-aware keyboard layer.
- * Bindings look like "mod+k", "g f", "?" or "t". Plain keys are ignored while
- * an input is focused; modified shortcuts stay available.
+ * Bindings look like "mod+k", "g f", "shift+?" or "t". Plain keys are ignored
+ * while an input is focused; modified shortcuts stay available.
  */
 export function useKeyboardNav(bindings: Record<string, KeyBinding>) {
   const bindingsRef = useRef(bindings);

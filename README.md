@@ -16,9 +16,9 @@ A customized [Mindcraft](https://github.com/mindcraft-bots/mindcraft) 0.1.4 depl
 
 | Area | Change |
 | --- | --- |
-| Dashboard | Six-view React/TypeScript SPA (Fleet, Grind, Build, Add-ons, AI providers, Settings) plus a legacy shell, served by a dependency-free Node supervisor. |
-| Fleet control | Live agent cards, health/food, coordinates, ping, player radar, systemd service start/restart/stop, and a guarded **Restart foreman** action. |
-| Work queues | Persistent Grind jobs and Sponge schematic builds with pause/resume/abort, progress reconciliation, material ledger, shortages, and history. |
+| Dashboard | Six-view React/TypeScript SPA (Fleet, Grind, Build, Add-ons, AI providers, Settings) plus a legacy shell, served by a dependency-free Node supervisor. Every view is driven by the live supervisor API. |
+| Fleet control | Live agent rows with health/food, coordinates, ping, player radar, systemd service start/restart/stop, and a guarded **Restart foreman** action. |
+| Work queues | Persistent Grind jobs and Sponge schematic builds with pause/resume/cancel, progress reconciliation, material ledger, shortages, and history. |
 | Add-ons | Toggleable combat/survival/recon/economy modules, CPS slider, one-packet dispatch groups, and a threat ledger. |
 | Providers | Priority-ordered fallback chain of up to 20 OpenAI-compatible providers, write-only API-key storage, endpoint tests, and hot restart. |
 | Protocol fixes | `tick_end` is paired with movement packets, position writes are throttled, block searches are clamped and time-boxed, and placement refuses interactive support blocks. |
@@ -138,7 +138,7 @@ These are the values currently in `settings.js`:
 | `only_chat_with` | Three operator names | Chat allow-list. This filters conversation, not code execution or network access. |
 | `chat_ingame` | `true` | Bot replies are shown in Minecraft chat. |
 | `allow_insecure_coding` | `true` | Enables `newAction` and model-authored code execution. **Elevated risk.** |
-| `code_timeout_mins` | `-1` | No code timeout. The dashboard's numeric field accepts 1–120 and requires a valid value before saving. |
+| `code_timeout_mins` | `-1` | No code timeout. The dashboard's numeric field accepts `-1` for no timeout or 1–120 minutes, and requires a valid value before saving. |
 | `blocked_actions` | Blueprint commands | Removes `!checkBlueprint`, `!checkBlueprintLevel`, `!getBlueprint`, and `!getBlueprintLevel` from the model's action surface. |
 | `spawn_timeout` | `60` | Seconds to wait for spawn. |
 | `narrate_behavior` | `true` | Narrates simple actions in chat. |
@@ -176,7 +176,7 @@ If ViaProxy is enabled but unreachable, or its target does not match, the handsh
 - `keyName` must be an uppercase environment-variable name such as `OPENAI_API_KEY`.
 - Timeouts must be 1000–120000 ms.
 - The dashboard can add, remove, reorder, enable/disable, test, and save routes. API keys are staged in memory, written with `0600` permissions on Linux, and never returned over the wire.
-- **Save & Restart** writes the table and restarts `mc-foreman`.
+- Each provider change posts the full table, which restarts `mc-foreman` so the new routing table is live.
 
 ### Self-prompting
 
@@ -192,7 +192,7 @@ The agent supports continuous goal-driven self-prompting:
 
 ## Yozakura control dashboard
 
-The dashboard is the Linux control plane for the deployed cluster. It is a single-file React SPA served by `deploy/linux/dashboard/server.js`; the supervisor uses only Node built-ins and reads `public/index.html` per request.
+The dashboard is the Linux control plane for the deployed cluster. It is a single-file React SPA served by `deploy/linux/dashboard/server.js`; the supervisor uses only Node built-ins and reads `public/index.html` per request. Every panel reads from the supervisor API and every control calls a real endpoint — where the API cannot do something, the control is absent rather than simulated.
 
 ### Build
 
@@ -202,7 +202,7 @@ npm ci
 npm run build
 ```
 
-`npm run build` runs `tsc --noEmit` and Vite, then writes a single offline-capable HTML bundle to `deploy/linux/dashboard/public/index.html`. No external asset requests are made by the page.
+`npm run build` runs `tsc --noEmit` and Vite, then writes a single offline-capable HTML bundle to `deploy/linux/dashboard/public/index.html`. Fonts, artwork, and icons are embedded in the bundle, so no external asset requests are made by the page. `deploy/linux/dashboard/MIGRATION.md` records the port in detail.
 
 ### Run the supervisor
 
@@ -218,7 +218,7 @@ node server.js
 Then open:
 
 ```text
-http://127.0.0.1:8092/?token=replace-with-a-long-random-token#fleet
+http://127.0.0.1:8092/?token=replace-with-a-long-random-token#/fleet
 ```
 
 The dashboard is designed for a Linux host managed by systemd. It expects these units:
@@ -245,16 +245,16 @@ The dashboard is not a Windows service manager. On Windows, use the built-in Min
 | Route | Serves |
 | --- | --- |
 | `/` | Yozakura SPA, default Fleet view. |
-| `/#fleet` | Fleet. |
-| `/#grind` | Grind. |
-| `/#build` | Build. |
-| `/#addons` | Add-ons. |
-| `/#providers` | AI providers. |
-| `/#settings` | Settings. |
+| `/#/fleet` | Fleet. |
+| `/#/grind` | Grind. |
+| `/#/build` | Build. |
+| `/#/addons` | Add-ons. |
+| `/#/providers` | AI providers. |
+| `/#/settings` | Settings. |
 | `/?tab=legacy` | Legacy dashboard (`public/legacy.html`). |
 | `/legacy` | Same legacy dashboard. |
 
-View changes use `history.replaceState` and stay on the same path, so the token query string is preserved. The SPA does not need a server-side rewrite rule.
+View changes only touch the hash, so the path and the token query string are preserved. The SPA does not need a server-side rewrite rule.
 
 ### Authentication and binding
 
@@ -278,15 +278,15 @@ The mock server is for design review and front-end checks only. It is not a prod
 
 ### Shell and global controls
 
-- **Sidebar**: Yozakura brand, cluster status, agent/core/add-on counts, core availability meter, navigation, Settings, Console, Command palette, and Legacy shell.
-- **Top bar**: current view breadcrumb, API status, last-update time, core service count, API p95, theme toggle, sound toggle, refresh, Command palette, notifications, and **Restart foreman**.
-- **Tabs**: Fleet, Grind, Build, Add-ons, Providers, Settings.
-- **Notifications**: service failures, build material shortages, active grind progress, pending action errors, offline state, and an all-clear state.
-- **Confirmation dialogs**: destructive or restarting actions require confirmation, including service stop/restart, grind abort, build abort, provider save/restart, profile switch, add-on bulk changes, and foreman restart.
-- **Offline behavior**: the SPA polls eight endpoints every 5 seconds. Partial failures show a degraded bar; repeated total failures show the last confirmed snapshot, an offline bar, and exponential backoff up to 30 seconds. Actions remain queued/persisted where the backend supports it.
+- **Sidebar**: Yozakura brand, live navigation with one status figure per view (agents reporting, jobs running or queued, build progress, add-ons armed, providers enabled), a live/reconnecting workspace footer with the snapshot age and version, and a collapse toggle that persists.
+- **Top bar**: current view title and subtitle, connection pill (live with snapshot age, or retry countdown), search, notifications, refresh, sound toggle, theme toggle, and console toggle.
+- **Mobile tab strip**: Fleet, Grind, Build, Add-ons, Providers, Settings. It is hidden on desktop, where the sidebar already does that job.
+- **Notifications**: service failures, build material shortages, agents that need attention, close radar contacts, missing provider keys, insecure-coding and configuration-drift warnings, and an all-clear state.
+- **Confirmation dialogs**: destructive or restarting actions require confirmation, including service stop/restart, grind cancel, build stop, profile switch, arming a guarded module, disarming every module, and foreman restart.
+- **Offline behavior**: the SPA polls eight endpoints every 5 seconds. Partial failures are reported per endpoint in the console; repeated total failures keep the last confirmed snapshot on screen behind a reconnect banner and back off exponentially up to 30 seconds.
 - **Themes**: `yozakura` (dark) and `hanami` (daylight). Preferences are stored in `localStorage`.
-- **Terminal dock**: per-service log tabs, 4-second log polling, CRT toggle, command history, quick commands, and direct dispatch.
-- **Command palette**: navigation, refresh, terminal, restart `mc-foreman`/`mc-cluster`, theme, sound, and legacy interface.
+- **Terminal dock**: per-service log filters (foreman, cluster, shim, dashboard, server), console/api/warning filters, a pause toggle, scrollback clearing, a draggable and keyboard-resizable height, command history, and direct dispatch of server commands to ENI1.
+- **Command palette**: navigation, agent inspection, refresh, theme, sound, console, keyboard shortcuts, pause/resume for a running job, and the disarm-all safety action.
 - **Radar lightbox**: expanded player radar with range control and ENI1 coordinates.
 
 ### Keyboard shortcuts
@@ -294,7 +294,7 @@ The mock server is for design review and front-end checks only. It is not a prod
 | Shortcut | Action |
 | --- | --- |
 | `Ctrl/Cmd+K` | Toggle the command palette. |
-| `?` | Open the command palette. |
+| `?` | Open the keyboard shortcut sheet. |
 | `Ctrl/Cmd+J` | Toggle the terminal dock. |
 | `g f` | Go to Fleet. |
 | `g g` | Go to Grind. |
@@ -302,6 +302,9 @@ The mock server is for design review and front-end checks only. It is not a prod
 | `g a` | Go to Add-ons. |
 | `g p` | Go to AI providers. |
 | `g s` | Go to Settings. |
+| `r` | Refresh the snapshot. |
+| `t` | Toggle the theme. |
+| `s` | Toggle interface sounds. |
 | `Escape` | Close the open dialog, palette, notification panel, mobile navigation drawer, or terminal overlay. |
 
 `g` sequences must be pressed within 900 ms. Plain-key shortcuts are ignored while an input, textarea, select, or content-editable field has focus; modified shortcuts still work.
@@ -316,14 +319,12 @@ The mock server is for design review and front-end checks only. It is not a prod
 
 | Area | Controls and behavior |
 | --- | --- |
-| Command hero | Connection chip (`Bot connected`, `Telemetry stale`, `Bot offline`, `Offline snapshot`), agent/profile/radar summary, **Queue grind**, **Upload build**, **Open radar**. |
-| Cluster pulse | API p95 latency and request throughput sparklines, success/error counts, last sweep. Measures dashboard API traffic, not LLM inference. |
-| Summary metrics | Agents reporting, core services active, API p95, current grind progress. |
-| Agents | One card per agent: name, dimension, health/food bars, coordinates, ping, current activity, state chip. Selecting a card targets the radar; **Show on radar** scrolls to it. |
-| Player radar | Contacts relative to the selected agent, range selector, held item, sneak state, distance, **Expand**. Requires the **Player Radar** add-on and fresh telemetry; otherwise shows why it is unavailable. |
-| Cluster services | Table of service, state, PID, CPU, memory, uptime, and actions. Start is immediate; restart and stop require confirmation. Optional services are labeled and excluded from core availability. |
+| Live summary hero | The headline states what needs attention (stopped unit, agent in trouble, running jobs) and links to the alert list. Beneath it: API latency p95 with a sparkline, requests per minute with a sparkline, API success rate, and active service count. Telemetry measures dashboard API traffic, not LLM inference. |
+| Agents | One row per agent: portrait, name, role, current activity, health and food meters, state, and ping. Selecting a row opens the agent inspector: position, dimension, unit, ping, **Copy coordinates**, and **Recall to base**. Only ENI1 accepts dispatched commands; coordinator agents are read-only and say so. |
+| Player radar | Contacts relative to ENI1, range selector (16/32/64 m), held item, sneak state, distance, and **Expand**. Requires the **Player Radar** add-on; otherwise it explains that and links to Add-ons. |
+| Cluster services | One row per systemd unit: state, role, PID, uptime, CPU, memory, and actions. **Start** is immediate; **Restart** and **Stop** require confirmation. |
 
-Primary APIs: `GET /api/status`, `GET /api/fleet`, `GET /api/telemetry`, `POST /api/service/:name/:action`.
+Primary APIs: `GET /api/status`, `GET /api/fleet`, `GET /api/telemetry`, `GET /api/addons`, `POST /api/service/:name/:action`.
 
 ### Grind — collection queue
 
@@ -331,11 +332,10 @@ Primary APIs: `GET /api/status`, `GET /api/fleet`, `GET /api/telemetry`, `POST /
 
 | Area | Controls and behavior |
 | --- | --- |
-| Queue a grind | Resource category filter (`All`, `Mining`, `Farming`), target grid, block-count stepper (1–128), **Queue N × resource**. The job is persisted and starts when the worker reconnects. |
-| Active job | Status, progress ring, collected/requested, rate per minute, ETA, elapsed time, job ID, **Pause**, **Resume**, **Abort**. Abort preserves partial progress in history. |
-| Queue | Maximum five waiting jobs. Each row shows target, radius, deposit, status, count, and a remove button. |
-| Grind history | Last ten jobs with target, requested, collected, status, and finish time. Cancelled jobs keep their partial count. |
-| Offline handling | If the agent is offline or telemetry is stale, a running job is reported as paused with a reconnect message. |
+| Active job | Target, progress, collected/requested, rate per minute, time left, remaining blocks, status, **Pause**, and **Cancel**. Cancel asks for confirmation and keeps what was already collected. |
+| Queue | The server's queue, at most five waiting jobs. Each row shows the target, count, status, and age, plus a remove button. The console does not reorder the queue. |
+| Grind history | The last finished jobs with collected/requested, duration, and status. Cancelled jobs keep their partial count. The list is server-owned and read-only. |
+| Queue a grind | Resource category (`Ores`, `Logs`, `Terrain`, `Crops`), block grid, block-count stepper (1–128) with 16/32/64/128 presets, and **Queue N × resource**. The button is disabled with a reason when the queue is full. |
 
 Primary APIs: `GET /api/grind`, `POST /api/grind` (`queue`, `pause`, `resume`, `cancel`).
 
@@ -346,12 +346,12 @@ Primary APIs: `GET /api/grind`, `POST /api/grind` (`queue`, `pause`, `resume`, `
 | Area | Controls and behavior |
 | --- | --- |
 | Load a structure | Dropzone or file picker for `.schem`; maximum 8 MB; empty files and non-`.schem` files are rejected. Litematica `.litematic` is not supported. |
-| Insertion point | Optional `Origin X/Y/Z`. Leave blank to anchor to ENI1's position with an X/Z offset of +2; explicit coordinates allow ±29,999,984. |
-| Placement options | Rotation `0° north`, `90° east`, `180° south`, `270° west`; **Preserve** or **Replace** existing blocks. |
-| Upload | Progress meter with transfer speed and ETA; **Upload & begin build**. The server rejects a second build while one is queued/running/paused/blocked. |
-| Current build | Status, progress ring/bar, size, rotation, preserve/replace mode, placed count, blocks/minute, ETA, elapsed, material ledger, and shortages. Shortages pause placement instead of skipping blocks. |
-| Build actions | **Pause**, **Resume**, **Abort**. Abort stops after the current placement tick and archives the job as cancelled. |
-| Build history | Last ten schematics with origin, rotation, placed/total, status, and finish time. |
+| Insertion point | Optional `Origin X/Y/Z`. Leave all three empty to build where the builder is standing; explicit coordinates allow ±29,999,984 and must be all-or-none. |
+| Placement options | Rotation `0°`, `90°`, `180°`, `270°`, and **Replace existing blocks**. Off skips occupied cells. |
+| Upload | Progress meter and **Upload and start build**. Only one build runs at a time: while a build is active the control is disabled and the reason is shown. |
+| Current build | Status, progress, layer, placed/total, rate per minute, time left, skipped blocks, origin, **Pause**, and **Stop build**. Stop asks for confirmation and leaves placed blocks in the world. |
+| Materials | The block counts ENI1 reports and which of them are missing. The API reports missing block names, not quantities, so **Open the grind planner** is the next step rather than a fake shortfall count. |
+| Build history | The last finished schematics with placed/skipped counts, duration, and status. The list is server-owned and read-only. |
 
 Primary APIs: `GET /api/schematic`, `POST /api/schematic/upload` (`application/octet-stream`), `POST /api/schematic/control`.
 
@@ -361,12 +361,13 @@ Primary APIs: `GET /api/schematic`, `POST /api/schematic/upload` (`application/o
 
 | Area | Controls and behavior |
 | --- | --- |
-| Toolbar | Search modules/categories/risk, **Arm all**, **Standby all**, armed count, guarded count, total/switchable count. Bulk changes require confirmation. |
+| Module summary | Armed, guarded, and managed counts. |
+| Toolbar | Module filter by name or description, and an `All` / `Armed` / `Guarded` filter. |
 | Modules | Combat: Auto Totem, CPS Booster (4–30 cps slider), Cooldown Mode. Survival: Auto Gapple, Auto Armor, Panic Escape (guarded). Recon: Player Radar, Auto Loot. Economy: Shop GUI, Auto Sell (guarded). System: Schematic Builder and Grind Worker are **managed** and link to Build/Grind instead of toggling here. |
-| Toggle behavior | Switches write through a 250 ms debounce. The UI keeps the last confirmed state on failure and offers an inline retry. |
-| Dispatch groups | Survival: Equip totem, Eat gapple, Equip armour. Recon: Collect drops, Return to base (`/home base`), Return to spawn (`/spawn`). Economy: Open shop, Check balance, Sell surplus. Server travel: Connect to Lifesteal (`/server lifesteal`), Random TP (`/randomtp`), Set home (`/sethome`), Return home (`/home`). |
+| Toggle behavior | Switching a module writes the add-on config immediately and pushes it to ENI1. Guarded modules ask for confirmation before they are armed, and conflicting modules turn each other off. A failed write restores the previous state. |
+| Dispatch groups | Loadout: Equip totem, Eat gapple, Equip armour. Field: Collect drops, Return to base (`/home base`), Return to spawn (`/spawn`). Economy: Open shop, Check balance, Sell surplus. Travel: Connect to Lifesteal (`/server lifesteal`), Random TP (`/randomtp`), Set home (`/sethome`), Return home (`/home`). Actions that need Shop GUI are disabled until it is armed. |
+| Kill switch | **Disarm all** turns off every switchable module at once, after a confirmation. |
 | Threat ledger | Contact, range, position, held item, and assessment (`Critical` at ≤10 m, `Caution` at ≤20 m, `Clear` beyond). |
-| Player radar | Mini radar and **Open radar** lightbox; contacts refresh about once per second when Player Radar is armed. |
 
 Primary APIs: `GET /api/addons`, `POST /api/addons`, `POST /api/addons/action`.
 
@@ -376,12 +377,11 @@ Primary APIs: `GET /api/addons`, `POST /api/addons`, `POST /api/addons/action`.
 
 | Area | Controls and behavior |
 | --- | --- |
-| KPI shelf | Active routes, primary route, API keys ready/staged, average probed latency. |
-| Filters | `All`, `Active`, `Bypassed`, `Needs Key`; search by name, model, or endpoint. |
-| Add Provider | Dialog with quick presets, display name, model identifier, OpenAI-compatible base URL, API secret, environment key variable, timeout, and connection test. Maximum 20 routes. |
-| Provider rows | Priority number, drag handle, enable/disable routing, endpoint copy, key state, latency/throughput/context metrics, endpoint health, **Test**, inline edit, move up/down, and remove. Reordering is disabled while filters are active. |
-| Sticky commit bar | **Reset** and **Save & Restart**. Saving requires confirmation and restarts `mc-foreman`. |
-| Key handling | Keys are staged in memory, written write-only with `0600` permissions, and never returned to dashboard clients. Clearing a key is a staged action. |
+| KPI shelf | Providers enabled, keys configured, average handshake latency, and models reachable. Latency and model counts appear only after a Test run in this session. |
+| Routing order | The fallback chain, in order, with a name/model/endpoint filter. Each row shows priority, endpoint, key state, model, model count, latency, timeout, an enable switch, move up/down, **Test endpoint**, and **Edit**. |
+| Add and edit | Dialog with display name, model identifier, OpenAI-compatible base URL, timeout, environment key variable, and API key. The key variable is required and must match `^[A-Z][A-Z0-9_]{1,63}$`. Maximum 20 routes. |
+| Save behavior | Every change posts the full table, which restarts `mc-foreman` so the new routing table is live. A failed save restores the previous order. |
+| Key handling | Keys are staged in memory, written write-only with `0600` permissions, and never returned to dashboard clients. Clearing a key is a staged action. **Test endpoint** stays disabled until a key is stored. |
 | Fallback rules | P1 first; on HTTP 429, 500, or timeout, try the next enabled route. Disabled routes receive no traffic. |
 
 Primary APIs: `GET /api/providers`, `POST /api/providers`, `POST /api/providers/test`.
@@ -392,14 +392,14 @@ Primary APIs: `GET /api/providers`, `POST /api/providers`, `POST /api/providers/
 
 | Area | Controls and behavior |
 | --- | --- |
-| Saved vs running | Compares `settings.js` with the service environment. `mc-cluster.env` wins; environment overrides are labeled `ENV`, and drift shows as “Restart pending.” |
-| Network | Host, port, Minecraft version, authentication (`offline`/`microsoft`), and **ViaProxy bridge** toggle. Enabling ViaProxy reveals host, port, and bot client version fields. |
-| Agent | Base profile, comma-separated chat allow-list, **Load memory at boot**, **Narrate behaviour in chat**. |
-| Safety | **Allow insecure coding** (`Guarded`/`Elevated`), code timeout (1–120 minutes), spawn timeout (10–600 seconds), and **Open dashboard at spawn**. |
-| Save behavior | **Save** writes changed fields without restarting. **Save & restart ENI1** confirms, writes, then restarts `mc-foreman` only. |
-| Agent profiles | Live profile card, search, all discovered profiles, model/file metadata, and **Use**. Switching requires confirmation and restarts the foreman; grind and schematic state persist. |
+| Saved vs running | Compares `settings.js` with the values the running process reports. Drift shows as `restart to apply`, and **Restart ENI1 to apply** asks for confirmation. |
+| Network | Host, port, Minecraft version, authentication (`offline`/`microsoft`), and the **ViaProxy bridge** toggle. Enabling ViaProxy reveals bridge host, port, and client version fields. |
+| Agent | MindServer port, base profile, comma-separated chat allow-list, code timeout, spawn timeout, **Load memory on boot**, **Narrate behaviour**, **Open the console on boot**, and **Allow insecure coding**. |
+| Save behavior | **Save** writes changed fields without restarting. **Save and restart ENI1** confirms, writes, then restarts `mc-foreman` only. **Discard** drops the local edits. |
+| Agent profiles | Every profile the supervisor reports, with its model and file name. Switching asks for confirmation and restarts the foreman; grind and schematic state persist. |
+| Maintenance | **Restart mc-foreman** (or **Start** when it is down) from a dedicated panel. |
 
-Primary APIs: `GET /api/config`, `POST /api/config`, `GET /api/profiles`.
+Primary APIs: `GET /api/config`, `POST /api/config`.
 
 ---
 

@@ -8,6 +8,7 @@ const NOTES: Record<SoundKind, number[]> = {
   warn: [440, 392],
 };
 
+/** Short WebAudio cues. Purely optional — never throws when audio is blocked. */
 export function useSound(enabled: boolean) {
   const context = useRef<AudioContext | null>(null);
 

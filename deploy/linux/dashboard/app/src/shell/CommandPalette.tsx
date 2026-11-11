@@ -1,329 +1,254 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { actions, useDashboard } from "../state/store";
-import type { View } from "../data/types";
-import { Icon, type IconName } from "../ui/icons";
-import { cx } from "../utils/cx";
-import { shortcutLabel } from "../utils/platform";
+import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  Keyboard,
+  MoonStar,
+  Pause,
+  Play,
+  RefreshCw,
+  Search,
+  ShieldOff,
+  TerminalSquare,
+  User,
+  Volume2,
+  type LucideIcon,
+} from "lucide-react";
+import { useConsole } from "../state/store";
+import { Kbd } from "../ui/kit";
+import { cn } from "../utils/cn";
+import { MOD_LABEL } from "../utils/platform";
+import { NAV } from "./Sidebar";
+
+type Group = "Go to" | "Agents" | "Actions";
 
 type Command = {
   id: string;
-  group: "Navigate" | "Actions" | "Supervisor" | "Interface";
+  group: Group;
   label: string;
-  detail?: string;
-  icon: IconName;
-  shortcut?: string;
-  run: () => void | Promise<void>;
+  hint?: string;
+  icon: LucideIcon;
+  keywords?: string;
+  run: () => void;
 };
 
-const VIEW_COMMANDS: { view: View; label: string; icon: IconName }[] = [
-  { view: "fleet", label: "Go to Fleet", icon: "fleet" },
-  { view: "grind", label: "Go to Grind", icon: "activity" },
-  { view: "build", label: "Go to Build", icon: "layers" },
-  { view: "addons", label: "Go to Add-ons", icon: "sliders" },
-  { view: "providers", label: "Go to AI providers", icon: "cpu" },
-  { view: "settings", label: "Go to Settings", icon: "settings" },
-];
-
-function renderShortcut(shortcut: string) {
-  // Keep word tokens such as "Ctrl" intact, but split glyph combinations
-  // like "⌘⇧T" into individual keycaps.
-  const symbols = shortcut.includes(" ") ? shortcut.split(/\s+/) : Array.from(shortcut);
-  return (
-    <span className="shortcut-group" style={{ display: "inline-flex", gap: 3, alignItems: "center", flexShrink: 0 }}>
-      {symbols.map((k, i) => (
-        <span key={i} className="kbd">
-          {k}
-        </span>
-      ))}
-    </span>
-  );
-}
+const GROUPS: Group[] = ["Go to", "Agents", "Actions"];
+const VIEW_KEYS: Record<string, string> = { fleet: "G F", grind: "G G", build: "G B", addons: "G A", providers: "G P", settings: "G S" };
+const VIEW_WORDS: Record<string, string> = {
+  fleet: "agents bots services radar home",
+  grind: "mine collect queue ore resources",
+  build: "schematic upload layers blocks",
+  addons: "modules combat dispatch threats",
+  providers: "models api keys endpoints routing",
+  settings: "config host port profile theme",
+};
 
 export function CommandPalette() {
-  const theme = useDashboard((snapshot) => snapshot.theme);
-  const sound = useDashboard((snapshot) => snapshot.sound);
-  const paletteOpen = useDashboard((snapshot) => snapshot.paletteOpen);
-  const offlinePreview = useDashboard((snapshot) => snapshot.offlinePreview);
+  const open = useConsole((s) => s.paletteOpen);
+  const setOpen = useConsole((s) => s.setPaletteOpen);
   const [query, setQuery] = useState("");
-  const [active, setActive] = useState(0);
-  const inputRef = useRef<HTMLInputElement | null>(null);
-  const listRef = useRef<HTMLDivElement | null>(null);
-  const paletteRef = useRef<HTMLDivElement | null>(null);
+  const [index, setIndex] = useState(0);
+  const field = useRef<HTMLInputElement>(null);
+  const list = useRef<HTMLDivElement>(null);
 
-  const close = () => actions.setPaletteOpen(false);
+  // Commands are captured when the palette opens; labels reflect that moment.
+  const commands = useMemo<Command[]>(() => {
+    if (!open) return [];
+    const s = useConsole.getState();
+    const grindPaused = s.grind.current?.status === "paused" || s.grind.current?.status === "pausing";
+    const grindRunning = Boolean(s.grind.current && (s.grind.current.status === "running" || grindPaused));
+    const buildPaused = s.build.current?.status === "paused" || s.build.current?.status === "pausing";
+    const buildRunning = Boolean(s.build.current && (s.build.current.status === "running" || buildPaused));
 
-  const restartService = useCallback(async (name: string, action: "start" | "stop" | "restart") => {
-    const confirmed = await actions.requestConfirm({
-      eyebrow: "Service supervisor",
-      title: `${action[0].toUpperCase()}${action.slice(1)} ${name}?`,
-      description:
-        action === "stop"
-          ? `Stopping ${name} takes it out of the cluster until an operator starts it again.`
-          : `The supervisor will ${action} ${name}. In-flight work is persisted by the agent.`,
-      confirmLabel: `${action} ${name}`,
-      danger: action !== "start",
-    });
-    if (confirmed) void actions.serviceAction(name, action);
-  }, []);
-
-  const commands = useMemo<Command[]>(() => [
-    ...VIEW_COMMANDS.map((item) => ({
-      id: `view-${item.view}`,
-      group: "Navigate" as const,
+    const out: Command[] = NAV.map((item) => ({
+      id: `view-${item.id}`,
+      group: "Go to",
       label: item.label,
-      detail: `Panel ${String(["fleet", "grind", "build", "addons", "providers", "settings"].indexOf(item.view) + 1).padStart(2, "0")}`,
+      hint: VIEW_KEYS[item.id],
       icon: item.icon,
-      run: () => actions.setView(item.view),
-    })),
-    {
-      id: "refresh",
-      group: "Actions",
-      label: "Refresh all telemetry",
-      detail: "Run the batched poll now",
-      icon: "refresh",
-      shortcut: "R",
-      run: () => actions.refresh(),
-    },
-    {
-      id: "terminal",
-      group: "Actions",
-      label: "Open terminal dock",
-      detail: "Logs and direct bot commands",
-      icon: "terminal",
-      shortcut: shortcutLabel("J"),
-      run: () => actions.setTerminalOpen(true),
-    },
-    {
-      id: "restart-foreman",
-      group: "Supervisor",
-      label: "Restart mc-foreman",
-      detail: "Guarded · ENI1 reconnects automatically",
-      icon: "power",
-      run: () => restartService("mc-foreman", "restart"),
-    },
-    {
-      id: "restart-cluster",
-      group: "Supervisor",
-      label: "Restart mc-cluster",
-      detail: "Guarded · worker cluster restarts",
-      icon: "server",
-      run: () => restartService("mc-cluster", "restart"),
-    },
-    {
-      id: "theme",
-      group: "Interface",
-      label: theme === "yozakura" ? "Switch to Hanami daylight" : "Switch to Yozakura night",
-      detail: "Theme follows the saved operator preference",
-      icon: theme === "yozakura" ? "sun" : "moon",
-      shortcut: "T",
-      run: () => actions.toggleTheme(),
-    },
-    {
-      id: "sound",
-      group: "Interface",
-      label: sound ? "Mute interface chimes" : "Enable interface chimes",
-      detail: "Opt-in Web Audio pentatonic tones",
-      icon: sound ? "volume-x" : "volume",
-      run: () => actions.toggleSound(),
-    },
-    {
-      id: "legacy",
-      group: "Interface",
-      label: "Open legacy interface",
-      detail: "Rollback shell at /?tab=legacy",
-      icon: "external",
-      run: () => {
-        window.location.href = "/?tab=legacy";
-      },
-    },
-  ], [restartService, sound, theme]);
+      keywords: VIEW_WORDS[item.id],
+      run: () => s.setView(item.id),
+    }));
 
-  const filtered = useMemo(() => {
-    const needle = query.trim().toLowerCase();
-    if (!needle) return commands;
-    return commands.filter((command) =>
-      `${command.label} ${command.detail ?? ""} ${command.group}`.toLowerCase().includes(needle),
+    for (const bot of s.bots) {
+      out.push({
+        id: `agent-${bot.id}`,
+        group: "Agents",
+        label: `Inspect ${bot.name}`,
+        hint: bot.state,
+        icon: User,
+        keywords: `${bot.role} ${bot.state} ${bot.unit}`,
+        run: () => {
+          s.selectBot(bot.id);
+          s.setView("fleet");
+        },
+      });
+    }
+
+    out.push(
+      { id: "refresh", group: "Actions", label: "Refresh snapshot", hint: "R", icon: RefreshCw, keywords: "reload poll", run: () => s.refresh() },
+      {
+        id: "theme",
+        group: "Actions",
+        label: s.theme === "yozakura" ? "Switch to Hanami, the day theme" : "Switch to Yozakura, the night theme",
+        hint: "T",
+        icon: MoonStar,
+        keywords: "dark light appearance",
+        run: () => s.toggleTheme(),
+      },
+      { id: "sound", group: "Actions", label: s.sound ? "Mute interface sounds" : "Enable interface sounds", hint: "S", icon: Volume2, keywords: "audio", run: () => s.toggleSound() },
+      {
+        id: "console",
+        group: "Actions",
+        label: s.terminalOpen ? "Collapse the console" : "Open the console",
+        hint: `${MOD_LABEL} J`,
+        icon: TerminalSquare,
+        keywords: "terminal logs dock",
+        run: () => s.setTerminalOpen(!s.terminalOpen),
+      },
+      { id: "shortcuts", group: "Actions", label: "Keyboard shortcuts", hint: "?", icon: Keyboard, keywords: "help keys", run: () => s.setHelpOpen(true) },
     );
+    if (grindRunning) {
+      out.push({ id: "grind-pause", group: "Actions", label: grindPaused ? "Resume the grind job" : "Pause the grind job", icon: grindPaused ? Play : Pause, keywords: "collection", run: () => s.grindTogglePause() });
+    }
+    if (buildRunning) {
+      out.push({ id: "build-pause", group: "Actions", label: buildPaused ? "Resume the build" : "Pause the build", icon: buildPaused ? Play : Pause, keywords: "schematic", run: () => s.buildTogglePause() });
+    }
+    out.push({
+      id: "disarm",
+      group: "Actions",
+      label: "Disarm all add-ons…",
+      icon: ShieldOff,
+      keywords: "kill switch safety stop",
+      run: () =>
+        s.askConfirm({
+          eyebrow: "Safety",
+          title: "Disarm all add-ons?",
+          description: "Auto Totem, Auto Gapple, the radar and every other switchable module turn off. ENI1 keeps running without its guard layer.",
+          confirmLabel: "Disarm everything",
+          danger: true,
+          action: () => s.disarmAll(),
+        }),
+    });
+    return out;
+  }, [open]);
+
+  const rows = useMemo(() => {
+    const terms = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
+    const visible = commands.filter((command) => {
+      const haystack = `${command.label} ${command.keywords ?? ""} ${command.group}`.toLowerCase();
+      return terms.every((term) => haystack.includes(term));
+    });
+    return GROUPS.flatMap((group) => visible.filter((command) => command.group === group));
   }, [commands, query]);
 
   useEffect(() => {
-    if (!paletteOpen) return;
-    const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    if (!open) return;
     setQuery("");
-    setActive(0);
-    const bodyOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    window.setTimeout(() => inputRef.current?.focus(), 30);
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        event.preventDefault();
-        close();
-        return;
-      }
-      if (event.key !== "Tab") return;
-      const panel = paletteRef.current;
-      if (!panel) return;
-      const focusable = Array.from(
-        panel.querySelectorAll<HTMLElement>(
-          'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
-        ),
-      ).filter((node) => node.getClientRects().length > 0);
-      if (focusable.length === 0) return;
-      const first = focusable[0];
-      const last = focusable[focusable.length - 1];
-      const current = document.activeElement;
-      if (event.shiftKey && (current === first || current === inputRef.current)) {
-        event.preventDefault();
-        last.focus();
-      } else if (!event.shiftKey && current === last) {
-        event.preventDefault();
-        first.focus();
-      }
-    };
-    document.addEventListener("keydown", onKey);
+    setIndex(0);
+    const previous = document.activeElement as HTMLElement | null;
+    const timer = window.setTimeout(() => field.current?.focus(), 0);
     return () => {
-      document.removeEventListener("keydown", onKey);
-      document.body.style.overflow = bodyOverflow;
-      if (previous?.isConnected) previous.focus();
+      window.clearTimeout(timer);
+      previous?.focus?.();
     };
-  }, [paletteOpen]);
+  }, [open]);
+
+  useEffect(() => setIndex(0), [query]);
 
   useEffect(() => {
-    setActive((value) => (filtered.length === 0 ? 0 : Math.min(value, filtered.length - 1)));
-  }, [filtered.length]);
+    list.current?.querySelector<HTMLElement>(`[data-index="${index}"]`)?.scrollIntoView({ block: "nearest" });
+  }, [index]);
 
-  useEffect(() => {
-    const node = listRef.current?.querySelector<HTMLElement>(`[data-index="${active}"]`);
-    node?.scrollIntoView({ block: "nearest" });
-  }, [active]);
+  if (!open) return null;
 
-  const [listFade, setListFade] = useState(false);
-  useEffect(() => {
-    const list = listRef.current;
-    if (!list) return;
-    const update = () => {
-      setListFade(
-        list.scrollHeight - list.clientHeight > 2 &&
-          list.scrollHeight - list.scrollTop - list.clientHeight > 8,
-      );
-    };
-    update();
-    list.addEventListener("scroll", update, { passive: true });
-    return () => list.removeEventListener("scroll", update);
-  }, [filtered.length, paletteOpen]);
-
-  if (!paletteOpen) return null;
-
-  const runAt = (index: number) => {
-    const command = filtered[index];
+  const run = (command: Command | undefined) => {
     if (!command) return;
-    close();
-    void command.run();
+    setOpen(false);
+    command.run();
   };
 
-  const groups = ["Navigate", "Actions", "Supervisor", "Interface"] as const;
-
   return (
-    <div
-      className="overlay"
-      onMouseDown={(event) => {
-        if (event.target === event.currentTarget) close();
-      }}
-    >
-      <div className="palette" role="dialog" aria-modal="true" aria-label="Command palette" ref={paletteRef}>
-        <div className="palette__search">
-          <Icon name="search" size={16} />
+    <div className="fixed inset-0 z-50 flex items-start justify-center px-4 pt-[12vh]" role="presentation">
+      <button type="button" tabIndex={-1} aria-label="Close" className="fade-in absolute inset-0 cursor-default bg-scrim backdrop-blur-[2px]" onClick={() => setOpen(false)} />
+      <div role="dialog" aria-modal="true" aria-label="Command palette" className="glass-deep sheet-in relative w-full max-w-[560px] overflow-hidden rounded-2xl border border-line-2 shadow-pop">
+        <div className="flex items-center gap-2.5 border-b border-line px-4">
+          <Search size={15} className="shrink-0 text-faint" />
           <input
-            ref={inputRef}
-            autoFocus
-            className="palette__input"
-            placeholder="Search views, actions, services…"
-            aria-label="Search commands"
+            ref={field}
             value={query}
-            role="combobox"
-            aria-expanded="true"
-            aria-controls="palette-list"
-            aria-activedescendant={filtered[active] ? `palette-${filtered[active].id}` : undefined}
-            aria-autocomplete="list"
-            onChange={(event) => {
-              setQuery(event.currentTarget.value);
-              setActive(0);
-            }}
+            onChange={(event) => setQuery(event.target.value)}
             onKeyDown={(event) => {
               if (event.key === "ArrowDown") {
                 event.preventDefault();
-                if (filtered.length === 0) return;
-                setActive((value) => Math.min(filtered.length - 1, value + 1));
+                setIndex((i) => Math.min(rows.length - 1, i + 1));
               } else if (event.key === "ArrowUp") {
                 event.preventDefault();
-                if (filtered.length === 0) return;
-                setActive((value) => Math.max(0, value - 1));
+                setIndex((i) => Math.max(0, i - 1));
               } else if (event.key === "Enter") {
                 event.preventDefault();
-                runAt(active);
+                run(rows[index]);
               } else if (event.key === "Escape") {
                 event.preventDefault();
-                close();
+                setOpen(false);
+              } else if (event.key === "Tab") {
+                event.preventDefault(); // keep focus inside the palette
               }
             }}
+            role="combobox"
+            aria-expanded="true"
+            aria-controls="palette-list"
+            aria-autocomplete="list"
+            aria-activedescendant={rows[index] ? `palette-option-${index}` : undefined}
+            aria-label="Search views, agents and actions"
+            placeholder="Search views, agents and actions"
+            spellCheck={false}
+            autoComplete="off"
+            className="h-12 w-full bg-transparent text-[14px] text-ink placeholder:text-faint focus:outline-none"
           />
-          <span className="kbd">ESC</span>
+          <Kbd>esc</Kbd>
         </div>
-        <div className="palette__list-wrap" data-fade={listFade || undefined}>
-          <div className="palette__list" id="palette-list" role="listbox" ref={listRef}>
-          {filtered.length === 0 && <div className="palette__empty">No command matches “{query}”.</div>}
-          {groups.map((group) => {
-            const items = filtered.filter((command) => command.group === group);
-            if (items.length === 0) return null;
-            return (
-              <div key={group}>
-                <div className="palette__group">{group}</div>
-                {items.map((command) => {
-                  const index = filtered.indexOf(command);
-                  return (
-                    <button
-                      key={command.id}
-                      type="button"
-                      id={`palette-${command.id}`}
-                      data-index={index}
-                      role="option"
-                      aria-selected={index === active}
-                      data-active={index === active || undefined}
-                      className={cx("palette__item")}
-                      onMouseMove={() => setActive(index)}
-                      onClick={() => runAt(index)}
-                    >
-                      <Icon name={command.icon} size={15} />
-                      <span>{command.label}</span>
-                      {command.detail && (
-                        <span className="palette__hint" style={{ marginLeft: "auto", maxWidth: 250, overflow: "hidden", textOverflow: "ellipsis" }}>
-                          {command.detail}
-                        </span>
-                      )}
-                      {command.shortcut && renderShortcut(command.shortcut)}
-                    </button>
-                  );
-                })}
+
+        <div ref={list} id="palette-list" role="listbox" className="max-h-[min(52vh,420px)] overflow-y-auto p-2">
+          {rows.length === 0 ? (
+            <p className="px-3 py-8 text-center text-[12.5px] text-mute">Nothing matches “{query}”.</p>
+          ) : (
+            rows.map((command, i) => (
+              <div key={command.id}>
+                {(i === 0 || rows[i - 1].group !== command.group) && <p className="eyebrow px-2.5 pb-1 pt-2.5">{command.group}</p>}
+                <button
+                  type="button"
+                  role="option"
+                  id={`palette-option-${i}`}
+                  aria-selected={i === index}
+                  data-index={i}
+                  tabIndex={-1}
+                  onMouseMove={() => setIndex(i)}
+                  onClick={() => run(command)}
+                  className={cn(
+                    "flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-[13px] transition-colors",
+                    i === index ? "bg-panel-2 text-ink" : "text-mute",
+                  )}
+                >
+                  <command.icon size={14.5} strokeWidth={1.9} className={cn("shrink-0", i === index ? "text-rose" : "text-faint")} />
+                  <span className="min-w-0 flex-1 truncate">{command.label}</span>
+                  {command.hint && <span className="num shrink-0 font-mono text-[10.5px] text-faint">{command.hint}</span>}
+                </button>
               </div>
-            );
-          })}
-          </div>
+            ))
+          )}
         </div>
-        <div className="palette__foot">
-          <span>
-            <span className="kbd">↑</span>
-            <span className="kbd">↓</span> navigate
+
+        <footer className="flex items-center gap-4 border-t border-line px-4 py-2.5 text-[10.5px] text-faint">
+          <span className="flex items-center gap-1">
+            <Kbd>↑</Kbd>
+            <Kbd>↓</Kbd> move
           </span>
-          <span>
-            <span className="kbd">↵</span> run
+          <span className="flex items-center gap-1">
+            <Kbd>↵</Kbd> run
           </span>
-          <span>
-            <span className="kbd">ESC</span> close
+          <span className="num ml-auto">
+            {rows.length} result{rows.length === 1 ? "" : "s"}
           </span>
-          <span className="palette__foot-meta" style={{ marginLeft: "auto" }}>
-            {filtered.length} {filtered.length === 1 ? "action" : "actions"} · {offlinePreview ? "Offline" : "Live"}
-          </span>
-        </div>
+        </footer>
       </div>
     </div>
   );

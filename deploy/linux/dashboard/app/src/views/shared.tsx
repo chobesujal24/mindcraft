@@ -1,85 +1,32 @@
-import type { ReactNode } from "react";
-import { useAgentStatus } from "../hooks/useAgentStatus";
-import { Icon, type IconName } from "../ui/icons";
+import type { JobStatus } from "../data/model";
+import { cn } from "../utils/cn";
 
-type ViewHeadProps = {
-  eyebrow: string;
-  title: string;
-  sub?: ReactNode;
-  aside?: ReactNode;
+const STATUS: Record<JobStatus, string> = {
+  running: "text-ink",
+  submitted: "text-mute",
+  queued: "text-mute",
+  pausing: "text-warn",
+  paused: "text-warn",
+  cancelling: "text-warn",
+  blocked: "text-danger",
+  completed: "text-mute",
+  cancelled: "text-faint",
+  failed: "text-danger",
 };
 
-export function ViewHead({ eyebrow, title, sub, aside }: ViewHeadProps) {
-  return (
-    <header className="view-head">
-      <div className="view-head__copy">
-        <div className="eyebrow">{eyebrow}</div>
-        <h1 className="display">{title}</h1>
-        {sub && <p className="view-head__sub">{sub}</p>}
-      </div>
-      {aside && <div className="view-head__aside">{aside}</div>}
-    </header>
-  );
+/** Plain coloured status word. Quieter than a pill in dense lists. */
+export function JobStatusLabel({ status, className }: { status: JobStatus; className?: string }) {
+  return <span className={cn("shrink-0 text-[11px] font-semibold", STATUS[status], className)}>{status}</span>;
 }
 
-type EmptyStateProps = {
-  icon?: IconName;
-  title: string;
-  children?: ReactNode;
-  action?: ReactNode;
-};
-
-export function EmptyState({ icon = "spark", title, children, action }: EmptyStateProps) {
+/** Label and value pair used in the small stat grids under a job. */
+export function Stat({ label, value, tone }: { label: string; value: string; tone?: "warn" }) {
   return (
-    <div className="empty">
-      <Icon name={icon} size={20} />
-      <strong>{title}</strong>
-      {children && <p>{children}</p>}
-      {action && <div className="mt-3">{action}</div>}
+    <div className="min-w-0">
+      <dt className="eyebrow">{label}</dt>
+      <dd className={cn("num mt-1 truncate text-[13px] font-medium", tone === "warn" ? "text-warn" : "text-ink")} title={value}>
+        {value}
+      </dd>
     </div>
-  );
-}
-
-export function AgentOfflineNotice({ action }: { action?: ReactNode }) {
-  const agent = useAgentStatus();
-  if (!agent.offline) return null;
-  return (
-    <div className="agent-notice" role="status">
-      <Icon name="wifi-off" size={14} />
-      <span>
-        <strong>{agent.name} is offline.</strong>{" "}
-        {action ?? "This action is saved and dispatched when the agent reconnects."}
-      </span>
-    </div>
-  );
-}
-
-export function PendingInline({
-  entry,
-  onRetry,
-  compact,
-}: {
-  entry?: { status: "pending" | "error"; error?: string } | null;
-  onRetry?: () => void;
-  compact?: boolean;
-}) {
-  if (!entry) return null;
-  if (entry.status === "pending") {
-    return (
-      <span className="sync" role="status">
-        <span className="dot dot--pulse" aria-hidden="true" /> working…
-      </span>
-    );
-  }
-  return (
-    <span className="error-inline" role="alert" title={entry.error}>
-      <Icon name="alert" size={11} />
-      {compact ? "failed" : entry.error ?? "Action failed."}
-      {onRetry && (
-        <button type="button" onClick={onRetry}>
-          Retry
-        </button>
-      )}
-    </span>
   );
 }

@@ -1,549 +1,417 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import type { Provider } from "../data/types";
-import { actions, useDashboard } from "../state/store";
-import { Button } from "../ui/Button";
-import { Chip } from "../ui/Chip";
-import { Icon } from "../ui/icons";
-import { Panel } from "../ui/Panel";
-import { AddProviderDialog } from "./providers/AddProviderDialog";
-import { ProviderKPIs } from "./providers/ProviderKPIs";
-import { ProviderRow } from "./providers/ProviderRow";
-import { EmptyState, PendingInline, ViewHead } from "./shared";
+import { useState, type FormEvent } from "react";
+import { motion } from "framer-motion";
+import { ArrowDown, ArrowUp, Copy, Cpu, Pencil, Plus, Search, X, Zap } from "lucide-react";
+import type { Provider } from "../data/model";
+import { useConsole } from "../state/store";
+import { Button, EmptyState, Field, IconButton, Metric, Panel, Switch, TextInput } from "../ui/kit";
+import { Dialog } from "../ui/overlay";
+import { cn } from "../utils/cn";
 
-type FilterTab = "all" | "active" | "bypassed" | "needs-key";
-
+/** `POST /api/providers` accepts at most 20 routes. */
 const MAX_PROVIDERS = 20;
-const SERVER_SYNC_WINDOW_MS = 30_000;
+const KEY_NAME = /^[A-Z][A-Z0-9_]{1,63}$/;
 
-/** Stable signature of the fields the server persists, used to tell a stale
- * poll apart from the list we just saved. */
-function providerFingerprint(list: Provider[]): string {
-  return list
-    .map((p) =>
-      [p.id, p.name, p.baseURL, p.keyName, p.model, p.timeoutMs, p.enabled ? 1 : 0].join("\u0001"),
-    )
-    .join("\u0002");
-}
+/* ── KPIs ──────────────────────────────────────────────── */
 
-export function Providers() {
-  const state = useDashboard();
-  const server = state.providers;
-  const savePending = state.pendingByAction["providers:save"];
-  const [drafts, setDrafts] = useState<Provider[]>(server ?? []);
-  const [dirty, setDirty] = useState(false);
-  const [apiKeys, setApiKeys] = useState<Record<string, string>>({});
-  const [clearKeys, setClearKeys] = useState<string[]>([]);
-  const [addOpen, setAddOpen] = useState(false);
-  const [dragging, setDragging] = useState<string | null>(null);
-  const [dropTarget, setDropTarget] = useState<string | null>(null);
-
-  // Search & Filter state
-  const [searchQuery, setSearchQuery] = useState("");
-  const [activeTab, setActiveTab] = useState<FilterTab>("all");
-
-  const draftsRef = useRef(drafts);
-  const syncGuardRef = useRef<{ fingerprint: string; until: number } | null>(null);
-  useEffect(() => {
-    draftsRef.current = drafts;
-  }, [drafts]);
-
-  useEffect(() => {
-    if (!server) return;
-    // After a successful save the poll can still return the previous routing
-    // table for a few seconds while the supervisor reloads. Keep the local
-    // drafts until the server confirms them (or the guard window expires).
-    const guard = syncGuardRef.current;
-    if (guard) {
-      if (providerFingerprint(server) === guard.fingerprint || Date.now() > guard.until) {
-        syncGuardRef.current = null;
-      } else {
-        return;
-      }
-    }
-    if (dirty) return;
-    setDrafts(server);
-  }, [server, dirty]);
-
-  const stagedKeyCount = Object.keys(apiKeys).length;
-  const hasChanges = dirty || stagedKeyCount > 0 || clearKeys.length > 0;
-  const busy = savePending?.status === "pending";
-  const enabledCount = drafts.filter((p) => p.enabled).length;
-  const bypassedCount = drafts.length - enabledCount;
-  const configuredCount = drafts.filter((p) => p.keyConfigured || apiKeys[p.id]).length;
-  const missingKeysCount = drafts.filter((p) => !p.keyConfigured && !apiKeys[p.id]).length;
-  const atProviderLimit = drafts.length >= MAX_PROVIDERS;
-  const isFiltering = activeTab !== "all" || searchQuery.trim().length > 0;
-
-  const patch = (id: string, next: Partial<Provider>) => {
-    setDirty(true);
-    setDrafts((current) => current.map((p) => (p.id === id ? { ...p, ...next } : p)));
-  };
-
-  const move = (id: string, direction: -1 | 1) => {
-    if (isFiltering) return;
-    setDrafts((current) => {
-      const index = current.findIndex((p) => p.id === id);
-      const target = index + direction;
-      if (index < 0 || target < 0 || target >= current.length) return current;
-      const next = [...current];
-      [next[index], next[target]] = [next[target], next[index]];
-      return next;
-    });
-    setDirty(true);
-  };
-
-  const remove = (id: string) => {
-    setDrafts((current) => current.filter((p) => p.id !== id));
-    setApiKeys((current) => {
-      const next = { ...current };
-      delete next[id];
-      return next;
-    });
-    setClearKeys((current) => current.filter((key) => key !== id));
-    setDirty(true);
-  };
-
-  const stageKey = (id: string, value: string) => {
-    setApiKeys((current) => {
-      const next = { ...current };
-      if (value) next[id] = value;
-      else delete next[id];
-      return next;
-    });
-    setClearKeys((current) => current.filter((key) => key !== id));
-  };
-
-  const markClear = (id: string) => {
-    const willClear = !clearKeys.includes(id);
-    setClearKeys((current) => (current.includes(id) ? current.filter((key) => key !== id) : [...current, id]));
-    setApiKeys((current) => {
-      const next = { ...current };
-      delete next[id];
-      return next;
-    });
-    // Undoing a pending clear restores the key state reported by the server
-    // instead of leaving the row stuck on "Key missing".
-    const serverProvider = server?.find((provider) => provider.id === id);
-    patch(id, { keyConfigured: willClear ? false : Boolean(serverProvider?.keyConfigured) });
-  };
-
-  const reorder = (from: string, to: string) => {
-    if (from === to || isFiltering) return;
-    setDrafts((current) => {
-      const fromIndex = current.findIndex((p) => p.id === from);
-      const toIndex = current.findIndex((p) => p.id === to);
-      if (fromIndex < 0 || toIndex < 0) return current;
-      const next = [...current];
-      const [moved] = next.splice(fromIndex, 1);
-      next.splice(toIndex, 0, moved);
-      return next;
-    });
-    setDirty(true);
-  };
-
-  const add = (provider: Provider, key: string) => {
-    if (draftsRef.current.length >= MAX_PROVIDERS) {
-      actions.notify(
-        "Provider limit reached",
-        `The server accepts at most ${MAX_PROVIDERS} routes. Remove one before adding another.`,
-        "warn",
-      );
-      return;
-    }
-    setDrafts((current) => [...current, provider]);
-    if (key) setApiKeys((current) => ({ ...current, [provider.id]: key }));
-    setDirty(true);
-    actions.notify("Provider Staged", `${provider.name} added to routing table. Click Save & restart to apply.`, "ok");
-  };
-
-  const reset = () => {
-    syncGuardRef.current = null;
-    setDrafts(server ?? []);
-    setApiKeys({});
-    setClearKeys([]);
-    setDirty(false);
-  };
-
-  const save = async () => {
-    if (!hasChanges || busy) return;
-    const confirmed = await actions.requestConfirm({
-      eyebrow: "Provider routing",
-      title: "Save routing table and restart providers?",
-      description:
-        "The provider priority order, enabled routes, and staged API keys will be saved to the protected server keystore. The supervisor reloads with the new fallback chain.",
-      confirmLabel: "Save & restart",
-      danger: true,
-    });
-    if (!confirmed) return;
-
-    const keysSnapshot = { ...apiKeys };
-    const clearSnapshot = [...clearKeys];
-    const submitted = drafts.map((provider) => ({ ...provider }));
-    const submittedFingerprint = providerFingerprint(submitted);
-
-    // Ensure keys and clear flags are mapped to both provider.keyName and provider.id
-    const keysPayload: Record<string, string> = {};
-    for (const [id, value] of Object.entries(keysSnapshot)) {
-      const p = drafts.find((x) => x.id === id);
-      if (p && p.keyName) {
-        keysPayload[p.keyName] = value;
-      }
-      keysPayload[id] = value;
-    }
-
-    const clearPayload: string[] = [];
-    for (const id of clearSnapshot) {
-      const p = drafts.find((x) => x.id === id);
-      if (p && p.keyName) {
-        clearPayload.push(p.keyName);
-      }
-      clearPayload.push(id);
-    }
-
-    const ok = await actions.saveProviders(submitted, keysPayload, clearPayload);
-    if (!ok) return;
-    syncGuardRef.current = { fingerprint: submittedFingerprint, until: Date.now() + SERVER_SYNC_WINDOW_MS };
-    // Only clear staged values that were part of this save. Anything the
-    // operator staged while the request was in flight stays pending.
-    setApiKeys((current) => {
-      const next = { ...current };
-      for (const [id, value] of Object.entries(keysSnapshot)) {
-        if (next[id] === value) delete next[id];
-      }
-      return next;
-    });
-    setClearKeys((current) => current.filter((id) => !clearSnapshot.includes(id)));
-    // Keep the draft dirty if it changed while the save was in flight.
-    setDirty(providerFingerprint(draftsRef.current) !== submittedFingerprint);
-  };
-
-  // Filtered providers
-  const filteredProviders = useMemo(() => {
-    return drafts.filter((p) => {
-      // Tab filter
-      if (activeTab === "active" && !p.enabled) return false;
-      if (activeTab === "bypassed" && p.enabled) return false;
-      if (activeTab === "needs-key") {
-        const hasK = p.keyConfigured || Boolean(apiKeys[p.id]);
-        if (hasK) return false;
-      }
-
-      // Search filter
-      if (searchQuery.trim()) {
-        const q = searchQuery.toLowerCase();
-        const nameMatch = p.name.toLowerCase().includes(q);
-        const modelMatch = (p.model || "").toLowerCase().includes(q);
-        const urlMatch = (p.baseURL || "").toLowerCase().includes(q);
-        if (!nameMatch && !modelMatch && !urlMatch) return false;
-      }
-
-      return true;
-    });
-  }, [drafts, activeTab, searchQuery, apiKeys]);
-
-  if (!server) {
-    return (
-      <>
-        <ViewHead
-          eyebrow="Operations · routing"
-          title="AI providers"
-          sub="Priority-ordered routing and automatic failover for agent inference."
-        />
-        <Panel>
-          <EmptyState
-            icon="cpu"
-            title={state.offlinePreview ? "Provider registry unavailable" : "Connecting to provider registry"}
-            action={<Button size="sm" variant="secondary" onClick={actions.refresh}>Retry connection</Button>}
-          >
-            {state.offlinePreview
-              ? "The provider list is unknown while the dashboard is offline. No sample providers are shown."
-              : "Connecting to the supervisor provider registry on the server..."}
-          </EmptyState>
-        </Panel>
-      </>
-    );
-  }
+function ProviderKPIs() {
+  const providers = useConsole((s) => s.providers);
+  const enabled = providers.filter((p) => p.enabled);
+  const configured = providers.filter((p) => p.keyConfigured);
+  const latencies = providers.map((p) => p.latencyMs).filter((v): v is number => v !== null);
+  const average = latencies.length > 0 ? Math.round(latencies.reduce((a, b) => a + b, 0) / latencies.length) : null;
+  const modelCounts = providers.map((p) => p.modelCount).filter((v): v is number => v !== null);
+  const models = modelCounts.length > 0 ? modelCounts.reduce((a, b) => a + b, 0) : null;
+  const missing = providers.filter((p) => !p.keyConfigured);
 
   return (
-    <>
-      <ViewHead
-        eyebrow="Operations · routing"
-        title="AI providers"
-        sub="Priority-ordered routing and automatic failover for agent inference. Review active routes, keys, and fallback order."
-        aside={
-          <div className="row" style={{ gap: 8 }}>
-            <Chip tone={state.offlinePreview ? "warn" : "ok"} dot>
-              {state.offlinePreview ? "Offline" : "Registry connected"}
-            </Chip>
-            <Chip tone={hasChanges ? "warn" : "neutral"} dot={hasChanges}>
-              {hasChanges ? "Unsaved Draft" : "Synced"}
-            </Chip>
-          </div>
-        }
+    <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+      <Metric
+        className="panel p-4 lg:p-5"
+        label="Providers enabled"
+        value={enabled.length}
+        unit={`of ${providers.length}`}
+        hint={enabled.length === 0 ? "agents cannot think" : `first choice: ${enabled[0].name}`}
+        tone={enabled.length === 0 ? "danger" : "default"}
       />
+      <Metric
+        className="panel p-4 lg:p-5"
+        label="Keys configured"
+        value={configured.length}
+        unit={`of ${providers.length}`}
+        hint={missing.length === 0 ? "every route has a stored key" : `missing: ${missing.map((p) => p.keyName).join(", ")}`}
+        tone={missing.length > 0 ? "warn" : "default"}
+      />
+      <Metric
+        className="panel p-4 lg:p-5"
+        label="Average handshake"
+        value={average ?? "—"}
+        unit={average === null ? undefined : "ms"}
+        hint={latencies.length === 0 ? "run a test to measure" : `${latencies.length} endpoint${latencies.length === 1 ? "" : "s"} tested this session`}
+        tone={average !== null && average > 500 ? "warn" : "default"}
+      />
+      <Metric
+        className="panel p-4 lg:p-5"
+        label="Models reachable"
+        value={models ?? "—"}
+        hint={models === null ? "tests report the model count" : `summed across ${modelCounts.length} tested endpoint${modelCounts.length === 1 ? "" : "s"}`}
+      />
+    </div>
+  );
+}
 
-      {/* Top 4-KPI Overview Shelf */}
-      <ProviderKPIs providers={drafts} stagedKeyIds={Object.keys(apiKeys)} />
+/* ── Row ───────────────────────────────────────────────── */
 
-      <div className="providers-layout mt-3">
-        <Panel
-          className="providers-panel"
-          eyebrow="Routing order"
-          title="Provider fallback chain"
-          sub="Routes are evaluated in priority order from P1 down. If a provider errors or times out, the next route is tried."
-          tools={
-            <div className="row" style={{ gap: 8 }}>
-              {hasChanges && (
-                <Chip tone="warn" dot>
-                  {drafts.length - (server?.length ?? 0) !== 0
-                    ? `${drafts.length} routes`
-                    : "Order modified"}
-                </Chip>
-              )}
-              {stagedKeyCount > 0 && (
-                <Chip tone="accent" dot>
-                  {stagedKeyCount} key{stagedKeyCount === 1 ? "" : "s"} staged
-                </Chip>
-              )}
-              <PendingInline entry={savePending} compact />
-            </div>
-          }
-          flush
-        >
-          {/* Modern Filter & Search Toolbar */}
-          <div className="providers-filter-toolbar">
-            <div className="providers-filter-tabs">
-              <button
-                type="button"
-                className={`providers-filter-tab ${activeTab === "all" ? "active" : ""}`}
-                onClick={() => setActiveTab("all")}
-              >
-                All <span className="providers-tab-count">{drafts.length}</span>
-              </button>
-              <button
-                type="button"
-                className={`providers-filter-tab ${activeTab === "active" ? "active" : ""}`}
-                onClick={() => setActiveTab("active")}
-              >
-                Active <span className="providers-tab-count">{enabledCount}</span>
-              </button>
-              <button
-                type="button"
-                className={`providers-filter-tab ${activeTab === "bypassed" ? "active" : ""}`}
-                onClick={() => setActiveTab("bypassed")}
-              >
-                Bypassed <span className="providers-tab-count">{bypassedCount}</span>
-              </button>
-              <button
-                type="button"
-                className={`providers-filter-tab ${activeTab === "needs-key" ? "active" : ""}`}
-                onClick={() => setActiveTab("needs-key")}
-              >
-                Needs Key{" "}
-                <span className={`providers-tab-count ${missingKeysCount > 0 ? "warn" : ""}`}>
-                  {missingKeysCount}
-                </span>
-              </button>
-            </div>
+function monogram(name: string) {
+  const letters = name.replace(/[^A-Za-z0-9]/g, " ").trim().split(/\s+/).slice(0, 2).map((part) => part[0]?.toUpperCase() ?? "");
+  return letters.join("") || "?";
+}
 
-            <div className="providers-toolbar-actions">
-              <div className="providers-search-wrap">
-                <Icon name="search" size={13} className="providers-search-icon" />
-                <input
-                  type="search"
-                  className="input providers-search-input"
-                  placeholder="Filter by name, model, endpoint…"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.currentTarget.value)}
-                />
-                {searchQuery && (
-                  <button
-                    type="button"
-                    className="providers-search-clear"
-                    onClick={() => setSearchQuery("")}
-                    title="Clear search"
-                  >
-                    ×
-                  </button>
-                )}
-              </div>
+function ProviderRow({ p, index, total, sortable, onEdit }: { p: Provider; index: number; total: number; sortable: boolean; onEdit: () => void }) {
+  const toggle = useConsole((s) => s.providerToggle);
+  const test = useConsole((s) => s.providerTest);
+  const move = useConsole((s) => s.providerMove);
+  const toast = useConsole((s) => s.toast);
+  const testing = useConsole((s) => Boolean(s.pending[`provider:test:${p.id}`]));
+  const busy = useConsole((s) => Boolean(s.pending["providers:save"]));
 
-              <Button
-                size="sm"
-                variant="primary"
-                leading={<Icon name="plus" size={12} />}
-                onClick={() => setAddOpen(true)}
-                disabled={busy || atProviderLimit}
-                disabledReason={
-                  atProviderLimit
-                    ? `The server accepts at most ${MAX_PROVIDERS} providers. Remove one first.`
-                    : undefined
-                }
-              >
-                Add Provider
-              </Button>
-            </div>
-          </div>
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(p.baseURL);
+      toast({ title: "Endpoint copied", detail: p.baseURL, tone: "ok" });
+    } catch {
+      toast({ title: "Clipboard is blocked", detail: p.baseURL, tone: "info" });
+    }
+  };
 
-          {/* Provider List */}
-          {drafts.length === 0 ? (
-            <EmptyState
-              icon="cpu"
-              title="No inference providers configured"
-              action={
-                <Button size="sm" variant="primary" onClick={() => setAddOpen(true)}>
-                  Add First Provider
-                </Button>
-              }
-            >
-              The Foreman bot and worker agents require at least one active LLM endpoint to generate actions.
-            </EmptyState>
-          ) : filteredProviders.length === 0 ? (
-            <div className="providers-empty-search">
-              <Icon name="search" size={24} />
-              <div className="providers-empty-search__title">No matching providers found</div>
-              <div className="mute">
-                No providers match the filter &quot;{searchQuery || activeTab}&quot;.
-              </div>
-              <Button
-                size="sm"
-                variant="secondary"
-                onClick={() => {
-                  setSearchQuery("");
-                  setActiveTab("all");
-                }}
-              >
-                Clear Filters
-              </Button>
-            </div>
-          ) : (
-            <div className="provider-list">
-              {filteredProviders.map((provider, index) => {
-                const actualIndex = drafts.findIndex((p) => p.id === provider.id);
-                return (
-                  <ProviderRow
-                    key={provider.id}
-                    provider={provider}
-                    index={actualIndex >= 0 ? actualIndex : index}
-                    total={drafts.length}
-                    draftKey={apiKeys[provider.id] ?? ""}
-                    clearKey={clearKeys.includes(provider.id)}
-                    reorderDisabled={isFiltering}
-                    dragging={dragging === provider.id}
-                    dropTarget={dropTarget === provider.id && dragging !== provider.id}
-                    onPatch={(next) => patch(provider.id, next)}
-                    onKeyChange={(value) => stageKey(provider.id, value)}
-                    onClearKey={() => markClear(provider.id)}
-                    onMove={(direction) => move(provider.id, direction)}
-                    onRemove={() => remove(provider.id)}
-                    onDragStart={() => {
-                      if (!isFiltering) setDragging(provider.id);
-                    }}
-                    onDragOver={() => {
-                      if (!isFiltering && dragging && dragging !== provider.id) {
-                        setDropTarget(provider.id);
-                      }
-                    }}
-                    onDrop={() => {
-                      if (!isFiltering && dragging) reorder(dragging, provider.id);
-                      setDragging(null);
-                      setDropTarget(null);
-                    }}
-                    onDragEnd={() => {
-                      setDragging(null);
-                      setDropTarget(null);
-                    }}
-                  />
-                );
-              })}
-            </div>
+  const keyState = p.keyConfigured
+    ? { text: `${p.keyName} set`, tone: "text-faint" }
+    : { text: `${p.keyName} missing`, tone: "text-warn" };
+
+  return (
+    <motion.li
+      layout="position"
+      transition={{ type: "spring", stiffness: 420, damping: 36 }}
+      className={cn("flex flex-col gap-3 px-3 py-3.5 sm:px-4 xl:flex-row xl:items-center xl:gap-4", !p.enabled && "bg-panel-2/20")}
+    >
+      {/* Identity */}
+      <div className="flex min-w-0 items-center gap-2.5 xl:flex-1">
+        <div className="flex shrink-0 flex-col">
+          <IconButton size="sm" icon={ArrowUp} label={`Move ${p.name} up`} className="h-[17px]" disabled={!sortable || busy || index === 0} onClick={() => move(p.id, -1)} />
+          <IconButton size="sm" icon={ArrowDown} label={`Move ${p.name} down`} className="h-[17px]" disabled={!sortable || busy || index === total - 1} onClick={() => move(p.id, 1)} />
+        </div>
+        <span
+          aria-hidden="true"
+          className={cn(
+            "flex size-9 shrink-0 items-center justify-center rounded-[10px] border font-display text-[11px] font-semibold",
+            p.enabled ? "border-line-2 bg-panel-2 text-mute" : "border-line text-faint",
           )}
-
-          {/* Sticky Commit & Restart Bar */}
-          <div className={`providers-bar ${hasChanges ? "providers-bar--dirty" : ""}`}>
-            <div className="providers-bar__note">
-              <Icon name={hasChanges ? "alert" : "check"} size={13} />
-              <span>
-                {hasChanges ? (
-                  <>
-                    <strong>Uncommitted changes staged:</strong> Click &quot;Save &amp; Restart&quot; to push
-                    updates to the supervisor and hot-reload Foreman.
-                  </>
-                ) : (
-                  <>
-                    <strong>Routing table synchronized:</strong> All {drafts.length} provider routes match the active server configuration.
-                  </>
-                )}
-              </span>
-            </div>
-            <div className="providers-bar__actions">
-              <Button size="sm" variant="quiet" onClick={reset} disabled={!hasChanges || busy}>
-                Reset
-              </Button>
-              <Button
-                size="sm"
-                variant="primary"
-                leading={<Icon name="refresh" size={12} />}
-                loading={busy}
-                loadingLabel="Restarting providers…"
-                onClick={() => void save()}
-                disabled={!hasChanges}
-                disabledReason="No local changes staged."
-              >
-                Save &amp; Restart
-              </Button>
-            </div>
-          </div>
-        </Panel>
-
-        {/* Aside Sidebar */}
-        <aside className="providers-aside">
-          <Panel eyebrow="Routing" title="Fallback behavior" tight>
-            <ol className="providers-rules">
-              <li>
-                <span className="mono">01</span>
-                <span>Provider P1 is tried first. On HTTP 429, 500, or timeout, the next route in the chain is tried.</span>
-              </li>
-              <li>
-                <span className="mono">02</span>
-                <span>Disabled routes stay in the table but receive no traffic until re-enabled.</span>
-              </li>
-              <li>
-                <span className="mono">03</span>
-                <span>Latency, tokens/sec, and context usage are reported from active bot tasks.</span>
-              </li>
-              <li>
-                <span className="mono">04</span>
-                <span>Staged keys are verified in memory and written to the host protected store.</span>
-              </li>
-            </ol>
-          </Panel>
-
-          <Panel eyebrow="Credentials" title="API key storage" tight>
-            <div className="providers-guard">
-              <Icon name="lock" size={14} />
-              <p>
-                API keys are stored write-only with restricted permissions (0600) on the Linux server. Stored values
-                are never returned over the wire to dashboard clients.
-              </p>
-            </div>
-            <div className="providers-guard__meta">
-              <Chip tone={configuredCount === drafts.length ? "ok" : "warn"} dot>
-                {configuredCount}/{drafts.length} configured
-              </Chip>
-              {stagedKeyCount > 0 && <Chip tone="accent">{stagedKeyCount} Staged</Chip>}
-              {clearKeys.length > 0 && <Chip tone="danger">{clearKeys.length} Clear Pending</Chip>}
-            </div>
-          </Panel>
-        </aside>
+        >
+          {monogram(p.name)}
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="flex items-baseline gap-1.5">
+            <span className="num text-[10.5px] text-faint">#{index + 1}</span>
+            <span className={cn("truncate text-[13.5px] font-semibold", p.enabled ? "text-ink" : "text-mute")} title={p.name}>
+              {p.name}
+            </span>
+          </p>
+          <button
+            type="button"
+            onClick={copy}
+            title={p.baseURL}
+            className="group flex max-w-full items-center gap-1.5 rounded text-left font-mono text-[10.5px] text-faint transition-colors hover:text-mute"
+          >
+            <span className="truncate">{p.baseURL.replace(/^https?:\/\//, "")}</span>
+            <Copy size={10} className="shrink-0 opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100" />
+          </button>
+          <p className={cn("mt-0.5 truncate font-mono text-[10px]", keyState.tone)}>{keyState.text}</p>
+        </div>
+        <div className="shrink-0 xl:hidden">
+          <Switch checked={p.enabled} onChange={() => toggle(p.id)} label={`${p.name}, ${p.enabled ? "enabled" : "disabled"}`} />
+        </div>
       </div>
 
-      <AddProviderDialog
-        open={addOpen}
-        existingIDs={drafts.map((p) => p.id)}
-        onClose={() => setAddOpen(false)}
-        onAdd={add}
-      />
-    </>
+      {/* Numbers */}
+      <dl className="grid min-w-0 grid-cols-3 gap-3 xl:w-[286px] xl:shrink-0 xl:gap-4">
+        <div className="min-w-0">
+          <dt className="eyebrow !text-[10px]">Model</dt>
+          <dd className="mt-0.5 truncate font-mono text-[11px] text-mute" title={p.model || "not reported"}>
+            {p.model || "—"}
+          </dd>
+        </div>
+        <div>
+          <dt className="eyebrow !text-[10px]">Models</dt>
+          <dd className="num mt-0.5 text-[12px] font-medium text-ink">{p.modelCount === null ? "—" : p.modelCount.toLocaleString("en-US")}</dd>
+        </div>
+        <div>
+          <dt className="eyebrow !text-[10px]">Latency</dt>
+          <dd className={cn("num mt-0.5 text-[12px] font-medium", p.latencyMs === null ? "text-faint" : p.latencyMs > 500 ? "text-warn" : "text-ink")}>
+            {p.latencyMs === null ? "—" : `${p.latencyMs} ms`}
+          </dd>
+        </div>
+      </dl>
+
+      <div className="flex items-center justify-between gap-3 xl:contents">
+        <p className="min-w-0 text-[10.5px] leading-snug text-faint xl:w-[146px] xl:shrink-0">
+          {p.timeoutMs.toLocaleString("en-US")} ms timeout
+        </p>
+
+        <div className="flex shrink-0 items-center gap-1">
+          <Button
+            size="sm"
+            variant="quiet"
+            icon={Zap}
+            loading={testing}
+            loadingLabel="Testing"
+            disabled={!p.keyConfigured}
+            disabledReason={`Add a value for ${p.keyName} first.`}
+            onClick={() => test(p.id)}
+          >
+            <span className="sm:hidden">Test</span>
+            <span className="max-sm:hidden">Test endpoint</span>
+          </Button>
+          <IconButton icon={Pencil} label={`Edit ${p.name}`} onClick={onEdit} />
+          <span className="hidden xl:inline-flex">
+            <Switch checked={p.enabled} onChange={() => toggle(p.id)} label={`${p.name}, ${p.enabled ? "enabled" : "disabled"}`} />
+          </span>
+        </div>
+      </div>
+    </motion.li>
+  );
+}
+
+/* ── Add / edit dialog ─────────────────────────────────── */
+
+function ProviderDialog({ provider, onClose }: { provider: Provider | null; onClose: () => void }) {
+  const save = useConsole((s) => s.providerSave);
+  const remove = useConsole((s) => s.providerRemove);
+  const askConfirm = useConsole((s) => s.askConfirm);
+  const [name, setName] = useState(provider?.name ?? "");
+  const [baseURL, setBaseURL] = useState(provider?.baseURL ?? "");
+  const [model, setModel] = useState(provider?.model ?? "");
+  const [keyName, setKeyName] = useState(provider?.keyName ?? "");
+  const [timeoutMs, setTimeoutMs] = useState(String(provider?.timeoutMs ?? 30_000));
+  const [apiKey, setApiKey] = useState("");
+  const [clearKey, setClearKey] = useState(false);
+  const [attempted, setAttempted] = useState(false);
+
+  const errors = {
+    name: name.trim() ? "" : "Give the provider a name.",
+    baseURL: /^https?:\/\/\S+$/i.test(baseURL.trim()) ? "" : "Enter a full URL starting with http:// or https://.",
+    keyName: KEY_NAME.test(keyName.trim())
+      ? ""
+      : "Use an uppercase key variable such as OPENAI_API_KEY.",
+    model: model.trim() || provider?.id === "nvidia-1" ? "" : "Enter the model identifier.",
+    timeoutMs:
+      Number.isInteger(Number(timeoutMs)) && Number(timeoutMs) >= 1_000 && Number(timeoutMs) <= 120_000
+        ? ""
+        : "Between 1,000 and 120,000 ms.",
+  };
+  const valid = Object.values(errors).every((message) => !message);
+  const shown = (key: keyof typeof errors) => (attempted && errors[key] ? errors[key] : undefined);
+
+  const submit = (event: FormEvent) => {
+    event.preventDefault();
+    setAttempted(true);
+    if (!valid) return;
+    save(
+      { id: provider?.id, name, baseURL, keyName, model, timeoutMs: Number(timeoutMs) },
+      { apiKey: apiKey.trim() || undefined, clear: clearKey && !apiKey.trim() },
+    );
+    onClose();
+  };
+
+  return (
+    <Dialog
+      open
+      onClose={onClose}
+      eyebrow="Provider routing"
+      title={provider ? `Edit ${provider.name}` : "Add provider"}
+      width="md"
+      footer={
+        <>
+          {provider && (
+            <Button
+              variant="danger"
+              className="mr-auto"
+              onClick={() => {
+                onClose();
+                askConfirm({
+                  eyebrow: "Provider routing",
+                  title: `Remove ${provider.name}?`,
+                  description: "The route leaves the fallback chain and ENI1 restarts. Its stored key is not deleted.",
+                  confirmLabel: "Remove provider",
+                  danger: true,
+                  action: () => remove(provider.id),
+                });
+              }}
+            >
+              Remove
+            </Button>
+          )}
+          <Button variant="quiet" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button variant="primary" type="submit" form="provider-form">
+            {provider ? "Save provider" : "Add provider"}
+          </Button>
+        </>
+      }
+    >
+      <form id="provider-form" className="space-y-4" onSubmit={submit} noValidate>
+        <Field label="Display name" htmlFor="pv-name" error={shown("name")}>
+          <TextInput id="pv-name" data-autofocus="" placeholder="e.g. Intern AI, DeepSeek R1, Groq" value={name} invalid={Boolean(shown("name"))} onChange={(e) => setName(e.target.value)} />
+        </Field>
+        <Field label="OpenAI-compatible base URL" htmlFor="pv-url" error={shown("baseURL")}>
+          <TextInput id="pv-url" className="font-mono" placeholder="https://chat.intern-ai.org.cn/api/v1" value={baseURL} invalid={Boolean(shown("baseURL"))} onChange={(e) => setBaseURL(e.target.value)} />
+        </Field>
+        <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_150px]">
+          <Field label="Model identifier" htmlFor="pv-model" error={shown("model")}>
+            <TextInput id="pv-model" className="font-mono" placeholder="e.g. internvl3.5-latest or gpt-4o" value={model} invalid={Boolean(shown("model"))} onChange={(e) => setModel(e.target.value)} />
+          </Field>
+          <Field label="Timeout (ms)" htmlFor="pv-timeout" error={shown("timeoutMs")}>
+            <TextInput id="pv-timeout" inputMode="numeric" value={timeoutMs} invalid={Boolean(shown("timeoutMs"))} onChange={(e) => setTimeoutMs(e.target.value.replace(/[^0-9]/g, ""))} />
+          </Field>
+        </div>
+
+        <div className="space-y-4 border-t border-line pt-4">
+          <Field label="Environment key variable" htmlFor="pv-keyname" error={shown("keyName")} hint="Required by the server. The key value is stored in keys.json by the supervisor.">
+            <TextInput
+              id="pv-keyname"
+              className="font-mono"
+              placeholder="e.g. INTERN_API_KEY"
+              value={keyName}
+              invalid={Boolean(shown("keyName"))}
+              onChange={(e) => {
+                setKeyName(e.target.value.toUpperCase().replace(/[^A-Z0-9_]/g, ""));
+                setClearKey(false);
+              }}
+            />
+          </Field>
+
+          <Field
+            label="API key value"
+            htmlFor="pv-apikey"
+            hint={
+              provider?.keyConfigured
+                ? `${provider.keyName} is already stored. Leave empty to keep it, or paste a new value to replace it.`
+                : "Paste the secret once. It is sent to the supervisor and never returned to this console."
+            }
+          >
+            <TextInput
+              id="pv-apikey"
+              type="password"
+              autoComplete="new-password"
+              className="font-mono"
+              placeholder={provider?.keyConfigured ? "••••••••  (stored)" : "Paste the API key"}
+              value={apiKey}
+              onChange={(e) => {
+                setApiKey(e.target.value);
+                if (e.target.value) setClearKey(false);
+              }}
+            />
+          </Field>
+
+          {provider?.keyConfigured && (
+            <div className="flex items-center justify-between gap-4 rounded-xl border border-line bg-panel-2/60 px-3.5 py-3">
+              <div className="min-w-0">
+                <p className="text-[12.5px] font-semibold text-ink">Remove the stored key</p>
+                <p className="mt-1 text-[11.5px] leading-relaxed text-mute">
+                  The provider stays configured, but testing and routing will fail until a new key is saved.
+                </p>
+              </div>
+              <Switch checked={clearKey} onChange={setClearKey} disabled={Boolean(apiKey.trim())} label={`Remove the stored key for ${provider.keyName}`} />
+            </div>
+          )}
+        </div>
+      </form>
+    </Dialog>
+  );
+}
+
+/* ── View ──────────────────────────────────────────────── */
+
+export function Providers() {
+  const providers = useConsole((s) => s.providers);
+  const saving = useConsole((s) => Boolean(s.pending["providers:save"]));
+  const [query, setQuery] = useState("");
+  const [editing, setEditing] = useState<string | null>(null);
+
+  const term = query.trim().toLowerCase();
+  const visible = term ? providers.filter((p) => `${p.name} ${p.model} ${p.baseURL}`.toLowerCase().includes(term)) : providers;
+  const target = editing && editing !== "new" ? (providers.find((p) => p.id === editing) ?? null) : null;
+  const atLimit = providers.length >= MAX_PROVIDERS;
+
+  return (
+    <div className="view-in space-y-4">
+      <ProviderKPIs />
+
+      <Panel
+        eyebrow="Routing order"
+        title="Provider fallback chain"
+        sub="The router tries enabled endpoints from the top down."
+        pad={false}
+        tools={
+          <Button
+            size="sm"
+            variant="primary"
+            icon={Plus}
+            disabled={atLimit || saving}
+            disabledReason={atLimit ? `The server accepts at most ${MAX_PROVIDERS} routes.` : "A routing change is being saved."}
+            onClick={() => setEditing("new")}
+          >
+            Add provider
+          </Button>
+        }
+      >
+        <div className="flex items-center gap-2 border-b border-line px-4 py-2.5 lg:px-5">
+          <Search size={13} className="shrink-0 text-faint" />
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Filter by name, model, endpoint…"
+            aria-label="Filter providers"
+            className="h-6 min-w-0 flex-1 bg-transparent text-[12.5px] text-ink placeholder:text-faint focus:outline-none"
+          />
+          {query && <IconButton size="sm" icon={X} label="Clear search" onClick={() => setQuery("")} />}
+          <span className="num shrink-0 text-[11px] text-faint">
+            {visible.length} of {providers.length}
+          </span>
+        </div>
+
+        {providers.length === 0 ? (
+          <EmptyState icon={Cpu} title="No inference providers configured" action={<Button size="sm" variant="primary" icon={Plus} onClick={() => setEditing("new")}>Add provider</Button>}>
+            Agents need at least one model endpoint before they can decide anything.
+          </EmptyState>
+        ) : visible.length === 0 ? (
+          <p className="px-5 py-8 text-center text-[12.5px] text-mute">No provider matches “{query}”.</p>
+        ) : (
+          <ol className="divide-y divide-line">
+            {visible.map((p) => (
+              <ProviderRow key={p.id} p={p} index={providers.indexOf(p)} total={providers.length} sortable={!term} onEdit={() => setEditing(p.id)} />
+            ))}
+          </ol>
+        )}
+      </Panel>
+
+      <div className="grid gap-4 md:grid-cols-2">
+        <Panel eyebrow="Routing" title="Fallback behavior">
+          <p className="text-[12.5px] leading-relaxed text-mute">
+            Order the list from preferred to last resort. The router sends each request to the first enabled provider. If
+            that call times out or fails, it retries on the next one down, so a single outage never stalls the fleet.
+            Reordering or toggling a route restarts ENI1 so the new table is live.
+          </p>
+        </Panel>
+        <Panel eyebrow="Credentials" title="Where keys live">
+          <p className="text-[12.5px] leading-relaxed text-mute">
+            Key values are written to the supervisor's <span className="font-mono text-[11.5px]">keys.json</span> and are
+            never returned by the API. This console shows only the variable name and whether a value is stored. The Test
+            button measures a real request; its result lasts for this session only.
+          </p>
+        </Panel>
+      </div>
+
+      {editing && <ProviderDialog key={editing} provider={target} onClose={() => setEditing(null)} />}
+    </div>
   );
 }

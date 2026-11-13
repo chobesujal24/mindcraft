@@ -75,8 +75,15 @@ function checkBasic(header) {
   return candidate.length === expected.length && crypto.timingSafeEqual(candidate, expected);
 }
 
+function logDenied(req, status) {
+  const ip = clientIp(req);
+  const path = String(req.url || '').split('?')[0];
+  console.log(`[auth-proxy] ${new Date().toISOString()} ${status} ${ip} ${req.method} ${path}`);
+}
+
 function unauthorized(req, res) {
   recordFailure(clientIp(req));
+  logDenied(req, 401);
   res.writeHead(401, {
     'WWW-Authenticate': 'Basic realm="Yozakura", charset="UTF-8"',
     'Content-Type': 'text/plain; charset=utf-8',
@@ -85,7 +92,8 @@ function unauthorized(req, res) {
   res.end('Authentication required.\n');
 }
 
-function tooMany(res) {
+function tooMany(req, res) {
+  logDenied(req, 429);
   res.writeHead(429, {
     'Content-Type': 'text/plain; charset=utf-8',
     'Retry-After': '600',
@@ -112,7 +120,7 @@ function forwardHeaders(req) {
 
 const server = http.createServer((req, res) => {
   const status = authorized(req);
-  if (status === 'limited') return tooMany(res);
+  if (status === 'limited') return tooMany(req, res);
   if (status !== 'ok') {
     // Slow down guessing without blocking the event loop.
     setTimeout(() => unauthorized(req, res), 150);
@@ -143,6 +151,7 @@ server.on('upgrade', (req, socket, head) => {
   const status = authorized(req);
   if (status !== 'ok') {
     if (status === 'no') recordFailure(clientIp(req));
+    logDenied(req, 401);
     socket.write('HTTP/1.1 401 Unauthorized\r\nWWW-Authenticate: Basic realm="Yozakura", charset="UTF-8"\r\nConnection: close\r\n\r\n');
     socket.destroy();
     return;

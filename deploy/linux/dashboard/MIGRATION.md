@@ -150,6 +150,9 @@ upgrades to the dashboard.
 
 - `auth.json` is `{ "username", "salt", "hash" }`, where `hash` is
   `scrypt(password, salt, 32)`.
+- Rotate the password with `bash auth-proxy-set-password.sh` from an
+  interactive terminal. It requires at least 16 characters, rewrites
+  `auth.json`, removes any plaintext copy, and restarts the proxy.
 - Point the tunnel ingress at `http://127.0.0.1:8093`; never at MindServer
   (`:8091`) or the raw supervisor when the hostname is public.
 - Tailscale clients can continue to use the supervisor directly on `:8092`;

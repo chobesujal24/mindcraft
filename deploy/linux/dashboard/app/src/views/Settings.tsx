@@ -151,23 +151,36 @@ function ControlLinkRow({ link }: { link: ControlLink }) {
   );
 }
 
+/**
+ * MindServer only listens on the host itself. When the dashboard is opened
+ * through the public tunnel, point the link at the tailnet address instead of
+ * the public hostname, which has no route to port 8091.
+ */
+const TAILNET_HOST = String(import.meta.env.VITE_TAILNET_HOST || "").trim();
+
 function ControlLinksPanel() {
   const saved = useConsole((s) => s.savedSettings);
   const foreman = useConsole((s) => s.services.find((svc) => svc.name === "mc-foreman"));
   const configuredPort = Number(saved.mindserver_port);
   const port = Number.isInteger(configuredPort) && configuredPort > 0 && configuredPort < 65_536 ? configuredPort : 8080;
   const host = (typeof window !== "undefined" && window.location.hostname) || "127.0.0.1";
-  const mindserver = `http://${host}:${port}/`;
+  const isIp = /^\d{1,3}(?:\.\d{1,3}){3}$/.test(host);
+  const onTailnetDirect = isIp || host === "localhost" || host.endsWith(".ts.net");
+  const mindserverHost = onTailnetDirect ? host : TAILNET_HOST;
+  const mindserver = mindserverHost ? `http://${mindserverHost}:${port}/` : "";
   const foremanLive = foreman?.state === "active";
+  const foremanState = foremanLive ? "live" : "starts with mc-foreman";
   const hostOnAternos = /\.aternos\.me$/i.test(saved.host);
 
   const links: ControlLink[] = [
-    {
-      label: "MindServer",
-      detail: `${mindserver} · ${foremanLive ? "live" : "starts with mc-foreman"}`,
-      href: mindserver,
-      icon: Server,
-    },
+    ...(mindserver
+      ? [{
+          label: "MindServer",
+          detail: `${mindserver} · ${onTailnetDirect ? foremanState : `tailnet only · ${foremanState}`}`,
+          href: mindserver,
+          icon: Server,
+        }]
+      : []),
     ...(hostOnAternos
       ? [{
           label: "Aternos panel",
@@ -217,6 +230,7 @@ function ControlLinksPanel() {
       </ul>
       <p className="border-t border-line px-5 py-3 text-[11px] leading-snug text-faint">
         MindServer is served by <span className="font-mono text-mute">mc-foreman</span> on the configured port and answers while that unit runs.
+        It stays on the tailnet, so open it from a device connected to Tailscale when you are viewing this dashboard through the public domain.
         Journal links return the most recent lines as JSON.
       </p>
     </Panel>

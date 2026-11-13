@@ -59,6 +59,12 @@ inlines JavaScript, CSS, fonts, and image assets into
 `deploy/linux/dashboard/public/index.html`. Expected output is roughly
 1.64 MB raw / 907 kB gzip. No external asset requests are made by the page.
 
+When the console is opened through a public hostname, set
+`VITE_TAILNET_HOST` to the host's Tailscale IP or MagicDNS name before
+building. Settings then points MindServer at that tailnet address and labels
+it tailnet-only. Without the variable, the MindServer link is hidden when the
+page is served from a non-IP, non-tailnet hostname.
+
 ### Dependencies
 
 Runtime: `react`, `react-dom`, `zustand` (state), `framer-motion` (view
@@ -134,6 +140,23 @@ directly from another machine, set `DASHBOARD_HOST=0.0.0.0` and
 `DASHBOARD_TOKEN`; otherwise keep the loopback default and use a reverse proxy
 on the same host. A non-loopback host without a token rejects API calls from
 non-local clients.
+
+## Public access without an app token
+
+For a public hostname, keep the supervisor on loopback and put
+`auth-proxy.mjs` in front of it. The proxy listens on `127.0.0.1:8093`, requires
+HTTP Basic Auth, rate-limits failed attempts, and forwards HTTP and WebSocket
+upgrades to the dashboard.
+
+- `auth.json` is `{ "username", "salt", "hash" }`, where `hash` is
+  `scrypt(password, salt, 32)`.
+- Point the tunnel ingress at `http://127.0.0.1:8093`; never at MindServer
+  (`:8091`) or the raw supervisor when the hostname is public.
+- Tailscale clients can continue to use the supervisor directly on `:8092`;
+  only the tunneled path goes through the password gate.
+- The supervisor's own `DASHBOARD_TOKEN` remains the stronger option when the
+  service environment is writable. The proxy is for hosts where the unit is
+  root-owned and cannot be edited.
 
 ## Rollback
 

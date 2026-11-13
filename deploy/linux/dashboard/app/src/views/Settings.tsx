@@ -1,4 +1,4 @@
-import { Keyboard, RotateCw } from "lucide-react";
+import { Activity, ArrowUpRight, BookOpen, Cloud, Keyboard, RotateCw, ScrollText, Server, TerminalSquare, type LucideIcon } from "lucide-react";
 import { SETTING_LABELS, useSettingsDraft } from "../state/derive";
 import { useConsole, type ThemeName } from "../state/store";
 import { Button, Chip, Panel, Segmented, Switch } from "../ui/kit";
@@ -115,6 +115,114 @@ function InterfacePanel() {
   );
 }
 
+/* ── Control links ─────────────────────────────────────── */
+
+type ControlLink = {
+  label: string;
+  detail: string;
+  href: string;
+  icon: LucideIcon;
+};
+
+function ControlLinkRow({ link }: { link: ControlLink }) {
+  const Icon = link.icon;
+  return (
+    <li className="flex items-center gap-3 px-5 py-3">
+      <span className="flex size-8 shrink-0 items-center justify-center rounded-lg border border-line-2 bg-panel-2 text-mute">
+        <Icon size={14} strokeWidth={1.9} />
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block text-[12.5px] font-medium text-ink">{link.label}</span>
+        <span className="mt-0.5 block truncate font-mono text-[10.5px] text-faint" title={link.detail}>
+          {link.detail}
+        </span>
+      </span>
+      <a
+        href={link.href}
+        target="_blank"
+        rel="noreferrer"
+        aria-label={`Open ${link.label}`}
+        className="group/link inline-flex h-8 shrink-0 select-none items-center justify-center gap-1.5 whitespace-nowrap rounded-lg px-3 text-[12px] font-medium transition-colors btn-secondary"
+      >
+        Open
+        <ArrowUpRight size={12} className="text-mute transition-colors group-hover/link:text-ink" />
+      </a>
+    </li>
+  );
+}
+
+function ControlLinksPanel() {
+  const saved = useConsole((s) => s.savedSettings);
+  const foreman = useConsole((s) => s.services.find((svc) => svc.name === "mc-foreman"));
+  const configuredPort = Number(saved.mindserver_port);
+  const port = Number.isInteger(configuredPort) && configuredPort > 0 && configuredPort < 65_536 ? configuredPort : 8080;
+  const host = (typeof window !== "undefined" && window.location.hostname) || "127.0.0.1";
+  const mindserver = `http://${host}:${port}/`;
+  const foremanLive = foreman?.state === "active";
+  const hostOnAternos = /\.aternos\.me$/i.test(saved.host);
+
+  const links: ControlLink[] = [
+    {
+      label: "MindServer",
+      detail: `${mindserver} · ${foremanLive ? "live" : "starts with mc-foreman"}`,
+      href: mindserver,
+      icon: Server,
+    },
+    ...(hostOnAternos
+      ? [{
+          label: "Aternos panel",
+          detail: `${saved.host}:${saved.port} · start or stop the world host`,
+          href: "https://aternos.org/server/",
+          icon: Cloud,
+        }]
+      : []),
+    {
+      label: "Legacy shell",
+      detail: `${host} · previous console on this supervisor`,
+      href: "/legacy",
+      icon: TerminalSquare,
+    },
+    {
+      label: "Supervisor state",
+      detail: "/api/state · units, coordinator roster and logs",
+      href: "/api/state",
+      icon: Activity,
+    },
+    {
+      label: "Foreman journal",
+      detail: "/api/logs?service=mc-foreman · last 200 lines",
+      href: "/api/logs?service=mc-foreman&lines=200",
+      icon: ScrollText,
+    },
+    {
+      label: "Cluster journal",
+      detail: "/api/logs?service=mc-cluster · last 200 lines",
+      href: "/api/logs?service=mc-cluster&lines=200",
+      icon: ScrollText,
+    },
+    {
+      label: "Documentation",
+      detail: "github.com/chobesujal24/mindcraft · README and issues",
+      href: "https://github.com/chobesujal24/mindcraft#readme",
+      icon: BookOpen,
+    },
+  ];
+
+  return (
+    <Panel eyebrow="Host · endpoints" title="Control links" pad={false}>
+      <ul className="divide-y divide-line">
+        {links.map((link) => (
+          <ControlLinkRow key={link.label} link={link} />
+        ))}
+      </ul>
+      <p className="border-t border-line px-5 py-3 text-[11px] leading-snug text-faint">
+        MindServer is served by <span className="font-mono text-mute">mc-foreman</span> on the configured port and answers while that unit runs.
+        Journal links return the most recent lines as JSON.
+      </p>
+    </Panel>
+  );
+}
+
 /* ── Maintenance ───────────────────────────────────────── */
 
 function MaintenancePanel() {
@@ -165,6 +273,7 @@ export function Settings() {
       <RuntimeConfig />
       <div className="space-y-4">
         <InterfacePanel />
+        <ControlLinksPanel />
         <ProfilesPanel />
         <MaintenancePanel />
       </div>

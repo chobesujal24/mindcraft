@@ -68,6 +68,7 @@ function ShortcutSheet() {
 function ConnectionBanner() {
   const down = useConsole((s) => s.connection.status !== "live");
   const retryIn = useConsole((s) => Math.max(1, Math.ceil(s.connection.nextRetryIn / 1000)));
+  const hasSnapshot = useConsole((s) => s.connection.lastSnapshotAt > 0);
   const age = useConsole((s) => Math.max(0, Math.round((s.nowTick - s.connection.lastSnapshotAt) / 1000)));
   const refresh = useConsole((s) => s.refresh);
   const refreshing = useConsole((s) => s.refreshing);
@@ -75,9 +76,11 @@ function ConnectionBanner() {
   return (
     <div role="status" className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1 border-b border-warn/30 bg-warn/10 px-4 py-2 text-[12px] lg:px-5">
       <StatusDot tone="warn" className="animate-pulse" />
-      <strong className="font-semibold text-warn">Reconnecting to the supervisor</strong>
+      <strong className="font-semibold text-warn">
+        {hasSnapshot ? "Reconnecting to the supervisor" : "Connecting to the supervisor"}
+      </strong>
       <span className="num text-mute">
-        Showing the snapshot from {age}s ago. Next attempt in {retryIn}s.
+        {hasSnapshot ? `Showing the snapshot from ${age}s ago.` : "Waiting for the first live snapshot."} Next attempt in {retryIn}s.
       </span>
       <Button size="xs" className="ml-auto" loading={refreshing} loadingLabel="Retrying" onClick={refresh}>
         Retry now

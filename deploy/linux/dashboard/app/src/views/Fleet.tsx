@@ -442,7 +442,7 @@ function ServiceRow({ svc }: { svc: Service }) {
   const detail = restarting
     ? "restarting…"
     : active
-      ? `${svc.role} · pid ${svc.pid ?? "—"} · up ${fmtDuration(now - (svc.startedAt ?? now))}`
+      ? `${svc.role} · pid ${svc.pid ?? "—"} · ${svc.startedAt === null ? "uptime not reported" : `up ${fmtDuration(now - svc.startedAt)}`}`
       : `${svc.role} · stopped`;
 
   return (

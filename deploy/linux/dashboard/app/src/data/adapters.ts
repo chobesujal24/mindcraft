@@ -86,27 +86,64 @@ export function adaptStatus(status: StatusResponse, now = Date.now()): Service[]
   return status.services.map((service) => adaptService(service, now));
 }
 
-const AVATAR_KEYS = ["eni", "miner", "grinder", "builder"] as const;
+const AVATAR_KEYS = ["eni", "grinder", "miner", "builder"] as const;
+
+export function resolveBotProfile(name: string, index: number): {
+  avatarKey: (typeof AVATAR_KEYS)[number];
+  role: string;
+} {
+  const lower = name.toLowerCase();
+  if (index === 0 || lower.includes("eni") || lower.includes("foreman")) {
+    return { avatarKey: "eni", role: "Foreman · AI Commander" };
+  }
+  if (
+    lower.includes("grind") ||
+    lower.includes("scout") ||
+    lower.includes("recon") ||
+    lower.includes("patrol") ||
+    lower.includes("guard") ||
+    lower.includes("combat") ||
+    lower.includes("slayer")
+  ) {
+    return { avatarKey: "grinder", role: "Vanguard · Perimeter & Combat" };
+  }
+  if (lower.includes("miner") || lower.includes("excavat") || lower.includes("dig")) {
+    return { avatarKey: "miner", role: "Excavator · Ore Specialist" };
+  }
+  if (lower.includes("build") || lower.includes("arch") || lower.includes("schem")) {
+    return { avatarKey: "builder", role: "Architect · Schematic Builder" };
+  }
+  const key = AVATAR_KEYS[index % AVATAR_KEYS.length];
+  const fallbackRoles: Record<(typeof AVATAR_KEYS)[number], string> = {
+    eni: "Foreman · AI Commander",
+    grinder: "Vanguard · Perimeter & Combat",
+    miner: "Excavator · Ore Specialist",
+    builder: "Architect · Schematic Builder",
+  };
+  return { avatarKey: key, role: fallbackRoles[key] };
+}
 
 export function adaptBots(fleet: FleetResponse): FleetBot[] {
-  return fleet.bots.map((bot, index) => ({
-    id: bot.id,
-    name: bot.name,
-    role: index === 0 ? "Foreman" : "Coordinator agent",
-    unit: index === 0 ? "mc-foreman" : "mc-cluster",
-    // The API does not serve avatars; only the console's embedded art is used.
-    avatar: AVATARS[AVATAR_KEYS[index % AVATAR_KEYS.length]],
-    health: bot.health,
-    food: bot.food,
-    x: bot.x,
-    y: bot.y,
-    z: bot.z,
-    dimension: bot.dimension,
-    ping: bot.ping,
-    basePing: bot.ping,
-    activity: bot.activity,
-    state: bot.state,
-  }));
+  return fleet.bots.map((bot, index) => {
+    const profile = resolveBotProfile(bot.name, index);
+    return {
+      id: bot.id,
+      name: bot.name,
+      role: profile.role,
+      unit: index === 0 ? "mc-foreman" : "mc-cluster",
+      avatar: AVATARS[profile.avatarKey],
+      health: bot.health,
+      food: bot.food,
+      x: bot.x,
+      y: bot.y,
+      z: bot.z,
+      dimension: bot.dimension,
+      ping: bot.ping,
+      basePing: bot.ping,
+      activity: bot.activity,
+      state: bot.state,
+    };
+  });
 }
 
 export type Telemetry = {

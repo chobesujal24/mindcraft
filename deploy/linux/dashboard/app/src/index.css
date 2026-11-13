@@ -62,7 +62,6 @@
   --panel-2: #24221f;
   --panel-3: #302d29;
   --surface-solid: #201e1b;
-  --primary-hover: #f6f2e9;
   --raise: #37342f;
   --line: rgb(236 228 214 / 0.085);
   --line-2: rgb(236 228 214 / 0.16);
@@ -119,7 +118,6 @@
   --sweep: 0.16;
   --pop-shadow: 0 1px 2px rgb(60 44 28 / 0.08), 0 16px 44px -16px rgb(60 44 28 / 0.26);
   --surface-solid: #ffffff;
-  --primary-hover: #3a332c;
 
   /* Glass — day. Frosted washi, higher opacity to keep text crisp on light. */
   --chrome-bg: color-mix(in oklab, var(--canvas) 64%, transparent);
@@ -234,6 +232,7 @@
   background: var(--panel);
   border: 1px solid var(--line);
   border-radius: 12px;
+  box-shadow: inset 0 1px 0 var(--glass-edge), 0 1px 2px rgb(0 0 0 / 0.12);
   transition: background-color 260ms ease, border-color 260ms ease;
 }
 
@@ -289,6 +288,52 @@
   background:
     radial-gradient(1200px 640px at 88% -18%, color-mix(in oklab, var(--rose) 10%, transparent), transparent 62%),
     radial-gradient(1000px 700px at -12% 118%, color-mix(in oklab, var(--gold) 8%, transparent), transparent 58%);
+}
+
+/* Petal drift. Two parallax fields of cherry petals cross the shell on a long
+   diagonal, one near and one far, at opposite speeds. They live in the same
+   fixed z-0 canvas layer as the washes, so no surface ever gains a gradient
+   behind it — the flat-panel rule holds. Opacity stays at a whisper: this is
+   night air, not decoration. */
+.ambient::before,
+.ambient::after {
+  content: "";
+  position: absolute;
+  inset: -25%;
+  background-repeat: repeat;
+  will-change: background-position;
+}
+
+.ambient::before {
+  background-image:
+    radial-gradient(3.5px 5px at 18% 22%, color-mix(in oklab, var(--rose) 60%, transparent), transparent 72%),
+    radial-gradient(2.5px 4px at 64% 48%, color-mix(in oklab, var(--rose-2) 46%, transparent), transparent 72%),
+    radial-gradient(3px 4.5px at 86% 78%, color-mix(in oklab, var(--rose) 40%, transparent), transparent 72%);
+  background-size: 420px 420px, 340px 340px, 520px 520px;
+  opacity: 0.5;
+  animation: petal-drift-near 78s linear infinite;
+}
+
+.ambient::after {
+  background-image:
+    radial-gradient(2px 3px at 34% 64%, color-mix(in oklab, var(--rose) 34%, transparent), transparent 72%),
+    radial-gradient(2.5px 3.5px at 78% 16%, color-mix(in oklab, var(--gold) 28%, transparent), transparent 72%);
+  background-size: 260px 260px, 300px 300px;
+  opacity: 0.34;
+  animation: petal-drift-far 124s linear infinite reverse;
+}
+
+[data-theme="hanami"] .ambient::before { opacity: 0.42; }
+[data-theme="hanami"] .ambient::after { opacity: 0.26; }
+
+@keyframes petal-drift-near {
+  from { background-position: 0 0, 0 0, 0 0; }
+  to { background-position: -420px 840px, 340px 680px, -520px 1040px; }
+}
+
+@keyframes petal-drift-far {
+  from { background-position: 0 0, 0 0; }
+  to { background-position: 260px 520px, -300px 600px; }
 }
 
 /* The drawer slides over live content, so it needs a near-opaque sheet;
@@ -366,6 +411,9 @@ html[data-theme="hanami"] .terminal-dock {
 
 .hero-summary {
   background: var(--panel);
+  background-image: linear-gradient(var(--glass-edge), var(--glass-edge));
+  background-size: 100% 1px;
+  background-repeat: no-repeat;
 }
 
 /* ── Fleet hero art ───────────────────────────────────────── */
@@ -602,8 +650,316 @@ input[type="range"].slider::-moz-range-thumb {
   box-shadow: 0 0 0 1px var(--line-2);
 }
 
+@keyframes bar-shimmer {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(220%);
+  }
+}
+
+.bar-shimmer {
+  background: linear-gradient(90deg, transparent 0%, rgb(255 255 255 / 0.38) 50%, transparent 100%);
+  animation: bar-shimmer 2.1s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+
+@keyframes toast-timer {
+  from {
+    transform: scaleX(1);
+  }
+  to {
+    transform: scaleX(0);
+  }
+}
+
+.toast-timer {
+  animation: toast-timer 5.2s linear forwards;
+}
+
+.blueprint-grid {
+  background-image:
+    linear-gradient(to right, rgb(236 228 214 / 0.08) 1px, transparent 1px),
+    linear-gradient(to bottom, rgb(236 228 214 / 0.08) 1px, transparent 1px);
+  background-size: 32px 32px;
+}
+
+/* ── Console Buttons ──────────────────────────────────────── */
+
+.btn-primary {
+  background-color: var(--rose);
+  border: 1px solid transparent;
+  color: var(--on-rose);
+}
+
+.btn-primary:not(:disabled):hover {
+  background-color: var(--rose-2);
+}
+
+.btn-secondary {
+  background-color: var(--panel-2);
+  border: 1px solid var(--line-2);
+  color: var(--ink);
+}
+
+.btn-secondary:not(:disabled):hover {
+  background-color: var(--panel-3);
+}
+
+/* ── Landing Page: Hybrid Glassmorphism & Tactile Neumorphism ─────────── */
+
+:root,
+[data-theme="yozakura"] {
+  --lp-glass-bg: linear-gradient(155deg, rgb(33 30 27 / 0.78) 0%, rgb(22 20 18 / 0.68) 100%);
+  --lp-glass-header: rgb(19 18 16 / 0.78);
+  --lp-neu-raised:
+    14px 16px 32px rgb(4 3 3 / 0.72),
+    -8px -8px 22px rgb(255 248 238 / 0.028),
+    inset 0 1px 1px rgb(255 249 240 / 0.12),
+    inset 0 -1px 1px rgb(0 0 0 / 0.45);
+  --lp-neu-raised-hover:
+    18px 22px 40px rgb(3 2 2 / 0.82),
+    -10px -10px 26px rgb(255 248 238 / 0.04),
+    inset 0 1px 1.5px rgb(255 249 240 / 0.18),
+    inset 0 -1px 1px rgb(0 0 0 / 0.5);
+  --lp-neu-well-bg: rgb(15 14 13 / 0.82);
+  --lp-neu-well-shadow:
+    inset 5px 5px 11px rgb(3 2 2 / 0.82),
+    inset -4px -4px 9px rgb(255 248 238 / 0.03),
+    0 1px 0 rgb(255 249 240 / 0.06);
+  --lp-neu-btn-bg: linear-gradient(145deg, #272421, #1c1a18);
+  --lp-neu-btn-shadow:
+    6px 6px 14px rgb(4 3 3 / 0.65),
+    -4px -4px 10px rgb(255 248 238 / 0.032),
+    inset 0 1px 0 rgb(255 249 240 / 0.1);
+  --lp-neu-btn-pressed:
+    inset 4px 4px 9px rgb(3 2 2 / 0.85),
+    inset -3px -3px 7px rgb(255 248 238 / 0.03),
+    0 1px 0 rgb(255 249 240 / 0.05);
+  --lp-cta-bg: linear-gradient(180deg, #312e2a 0%, #24211e 100%);
+  --lp-cta-ink: #f2ede4;
+  --lp-cta-border: rgb(236 228 214 / 0.2);
+  --lp-cta-border-hover: rgb(236 228 214 / 0.32);
+  --lp-cta-icon: #c8bfb2;
+  --lp-cta-shadow:
+    0 2px 4px rgb(0 0 0 / 0.42),
+    0 8px 18px -4px rgb(0 0 0 / 0.56),
+    inset 0 1px 0 rgb(255 250 242 / 0.15),
+    inset 0 -1px 0 rgb(0 0 0 / 0.45);
+  --lp-cta-shadow-hover:
+    0 4px 8px rgb(0 0 0 / 0.48),
+    0 12px 24px -6px rgb(0 0 0 / 0.65),
+    inset 0 1px 0 rgb(255 250 242 / 0.22),
+    inset 0 -1px 0 rgb(0 0 0 / 0.5);
+  --lp-cta-shadow-active:
+    inset 0 2px 5px rgb(0 0 0 / 0.65),
+    0 1px 0 rgb(255 250 242 / 0.06);
+  --lp-specular-rim: linear-gradient(
+    135deg,
+    rgb(255 249 240 / 0.2) 0%,
+    rgb(235 226 212 / 0.07) 42%,
+    rgb(255 255 255 / 0.02) 70%,
+    rgb(0 0 0 / 0.38) 100%
+  );
+}
+
+[data-theme="hanami"] {
+  --lp-glass-bg: linear-gradient(155deg, rgb(255 253 249 / 0.86) 0%, rgb(244 238 228 / 0.74) 100%);
+  --lp-glass-header: rgb(248 244 236 / 0.82);
+  --lp-neu-raised:
+    12px 14px 28px rgb(60 44 28 / 0.12),
+    -8px -8px 20px rgb(255 255 255 / 0.88),
+    inset 0 1px 1px rgb(255 255 255 / 0.94),
+    inset 0 -1px 1px rgb(60 44 28 / 0.06);
+  --lp-neu-raised-hover:
+    16px 20px 36px rgb(60 44 28 / 0.16),
+    -10px -10px 24px rgb(255 255 255 / 0.95),
+    inset 0 1px 1.5px rgb(255 255 255 / 0.98),
+    inset 0 -1px 1px rgb(60 44 28 / 0.08);
+  --lp-neu-well-bg: rgb(233 226 214 / 0.82);
+  --lp-neu-well-shadow:
+    inset 5px 5px 10px rgb(60 44 28 / 0.13),
+    inset -4px -4px 9px rgb(255 255 255 / 0.88),
+    0 1px 0 rgb(255 255 255 / 0.78);
+  --lp-neu-btn-bg: linear-gradient(145deg, #fdfbf7, #ebe3d6);
+  --lp-neu-btn-shadow:
+    5px 5px 12px rgb(60 44 28 / 0.13),
+    -4px -4px 10px rgb(255 255 255 / 0.88),
+    inset 0 1px 0 rgb(255 255 255 / 0.95);
+  --lp-neu-btn-pressed:
+    inset 4px 4px 8px rgb(60 44 28 / 0.16),
+    inset -3px -3px 7px rgb(255 255 255 / 0.85),
+    0 1px 0 rgb(255 255 255 / 0.72);
+  --lp-cta-bg: linear-gradient(145deg, #322c26 0%, #211d19 100%);
+  --lp-cta-ink: #f8f4ec;
+  --lp-cta-border: rgb(60 44 28 / 0.45);
+  --lp-cta-border-hover: rgb(60 44 28 / 0.62);
+  --lp-cta-icon: #f8f4ec;
+  --lp-cta-shadow:
+    6px 8px 20px rgb(0 0 0 / 0.4),
+    -4px -4px 12px rgb(255 248 238 / 0.035),
+    inset 0 1px 1px rgb(255 255 255 / 0.48);
+  --lp-cta-shadow-hover:
+    8px 10px 24px rgb(0 0 0 / 0.48),
+    -4px -4px 14px rgb(255 248 238 / 0.05),
+    inset 0 1px 1.5px rgb(255 255 255 / 0.6);
+  --lp-cta-shadow-active:
+    inset 3px 3px 7px rgb(0 0 0 / 0.32),
+    inset -2px -2px 5px rgb(255 255 255 / 0.18);
+  --lp-specular-rim: linear-gradient(
+    135deg,
+    rgb(255 255 255 / 0.92) 0%,
+    rgb(255 255 255 / 0.38) 46%,
+    rgb(60 44 28 / 0.13) 100%
+  );
+}
+
+/* Primary Glass-Neumorphic Card */
+.lp-glass-card {
+  position: relative;
+  background: var(--lp-glass-bg);
+  -webkit-backdrop-filter: blur(18px) saturate(1.3);
+  backdrop-filter: blur(18px) saturate(1.3);
+  border-radius: 22px;
+  box-shadow: var(--lp-neu-raised);
+  border: 1px solid var(--line);
+  transition: box-shadow 220ms ease, border-color 220ms ease;
+}
+
+.lp-glass-card:hover {
+  box-shadow: var(--lp-neu-raised-hover);
+}
+
+.lp-glass-card::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: var(--lp-specular-rim);
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+}
+
+/* Recessed Tactile Neumorphic Well (no nested backdrop-filter to prevent GPU flicker) */
+.lp-neu-well {
+  background: var(--lp-neu-well-bg);
+  border-radius: 15px;
+  box-shadow: var(--lp-neu-well-shadow);
+  border: 1px solid rgb(0 0 0 / 0.22);
+}
+
+[data-theme="hanami"] .lp-neu-well {
+  border-color: rgb(60 44 28 / 0.09);
+}
+
+/* Recessed Neumorphic Socket for Icons & Indices */
+.lp-neu-socket {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--lp-neu-well-bg);
+  border-radius: 14px;
+  box-shadow: var(--lp-neu-well-shadow);
+  border: 1px solid var(--line);
+}
+
+/* Extruded Neumorphic Pill for Framer Motion layoutId Indicators (no CSS transition) */
+.lp-neu-pill {
+  background: var(--lp-neu-btn-bg);
+  box-shadow: var(--lp-neu-btn-shadow);
+  border: 1px solid var(--line-2);
+  border-radius: 12px;
+}
+
+/* Extruded Tactile Neumorphic Button / Tile */
+.lp-neu-btn {
+  position: relative;
+  background: var(--lp-neu-btn-bg);
+  box-shadow: var(--lp-neu-btn-shadow);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  color: var(--ink);
+  transition: box-shadow 180ms ease, color 180ms ease, border-color 180ms ease, background 180ms ease;
+}
+
+.lp-neu-btn:hover:not(:disabled) {
+  border-color: var(--line-2);
+}
+
+.lp-neu-btn:active:not(:disabled),
+.lp-neu-btn[data-active="true"],
+.lp-neu-btn[aria-selected="true"] {
+  background: var(--lp-neu-well-bg);
+  box-shadow: var(--lp-neu-btn-pressed);
+  border-color: var(--line-2);
+  color: var(--ink);
+}
+
+/* Natural Matte Sumi-Stone (Dark Mode) / Sumi-Lacquer (Day Mode) Primary CTA */
+.lp-neu-cta {
+  position: relative;
+  background: var(--lp-cta-bg);
+  color: var(--lp-cta-ink);
+  border-radius: 11px;
+  border: 1px solid var(--lp-cta-border);
+  box-shadow: var(--lp-cta-shadow);
+  transition: box-shadow 180ms ease, border-color 180ms ease, background 180ms ease;
+}
+
+.lp-neu-cta svg {
+  color: var(--lp-cta-icon);
+  transition: color 180ms ease;
+}
+
+.lp-neu-cta:hover:not(:disabled) {
+  border-color: var(--lp-cta-border-hover);
+  box-shadow: var(--lp-cta-shadow-hover);
+}
+
+.lp-neu-cta:hover:not(:disabled) svg {
+  color: var(--lp-cta-ink);
+}
+
+.lp-neu-cta:active:not(:disabled) {
+  box-shadow: var(--lp-cta-shadow-active);
+}
+
+/* Floating Glass Header Bar */
+.lp-glass-nav {
+  background: var(--lp-glass-header);
+  -webkit-backdrop-filter: blur(18px) saturate(1.35);
+  backdrop-filter: blur(18px) saturate(1.35);
+  box-shadow:
+    0 10px 30px -10px rgb(0 0 0 / 0.48),
+    inset 0 1px 0 var(--glass-edge);
+}
+
+/* Subtle GPU-composited sonar pulse for live world beacons */
+@keyframes lp-sonar {
+  0% {
+    transform: scale(1);
+    opacity: 0.65;
+  }
+  100% {
+    transform: scale(1.95);
+    opacity: 0;
+  }
+}
+
+.lp-sonar-ring {
+  animation: lp-sonar 2.4s cubic-bezier(0.16, 1, 0.3, 1) infinite;
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .radar-sweep {
+  .radar-sweep,
+  .bar-shimmer,
+  .toast-timer,
+  .lp-sonar-ring,
+  .ambient::before,
+  .ambient::after {
     animation: none !important;
   }
   *,

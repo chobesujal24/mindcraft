@@ -133,6 +133,7 @@ export function ConfirmDialog() {
 
 const toastIcon = { ok: CheckCircle2, warn: AlertTriangle, danger: XCircle, info: Info } as const;
 const toastTint = { ok: "text-ok", warn: "text-warn", danger: "text-danger", info: "text-info" } as const;
+const toastBarTint = { ok: "bg-ok/70", warn: "bg-warn/70", danger: "bg-danger/70", info: "bg-info/70" } as const;
 
 export function ToastStack() {
   const toasts = useConsole((s) => s.toasts);
@@ -163,7 +164,7 @@ export function ToastStack() {
       {toasts.map((t) => {
         const IconCmp = toastIcon[t.tone];
         return (
-          <div key={t.id} className="glass-deep toast-in pointer-events-none flex items-start gap-2.5 rounded-xl border border-line-2 py-2.5 pl-3.5 pr-2 shadow-pop">
+          <div key={t.id} className="glass-deep toast-in pointer-events-none relative flex items-start gap-2.5 overflow-hidden rounded-xl border border-line-2 py-2.5 pl-3.5 pr-2 shadow-pop">
             <IconCmp size={15} className={cn("mt-[2px] shrink-0", toastTint[t.tone])} />
             <div className="min-w-0 flex-1 py-px">
               <p className="text-[12.5px] font-semibold leading-tight text-ink">{t.title}</p>
@@ -171,6 +172,10 @@ export function ToastStack() {
             </div>
             {/* Toasts are click-through so they never block the UI beneath; only dismiss catches the pointer. */}
             <IconButton icon={X} label="Dismiss" size="sm" onClick={() => dismiss(t.id)} className="pointer-events-auto" />
+            <span
+              aria-hidden="true"
+              className={cn("toast-timer absolute inset-x-0 bottom-0 h-[2px] origin-left", toastBarTint[t.tone])}
+            />
           </div>
         );
       })}

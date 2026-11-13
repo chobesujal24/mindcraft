@@ -9,6 +9,28 @@ The console is no longer a design prototype: every panel reads from the live
 supervisor API and every control calls a real endpoint. Where the API cannot do
 something, the control is absent rather than faked.
 
+## UI refresh
+
+The console was refreshed from the `fix-bugs-and-ui` design bundle without
+changing the supervisor contract:
+
+- Provider cards resolve the brand from the endpoint URL, show embedded provider
+  marks, and add **Test all**, which sends one real test request per keyed
+  route. Latency and model counts remain session-only.
+- Add-ons use the embedded SVG icon set for modules and dispatch groups. The
+  guarded-module confirmation and conflict handling are unchanged.
+- Build gains the schematic hero render and material manifest, Grind shows stack
+  counts and a one-click **Re-run** for finished jobs, and Fleet shows the
+  cluster target, uptime, and a bearing compass for nearby players.
+- World photography, hero art, provider marks, add-on icons, fonts, and block
+  renders are all embedded in the single-file build.
+
+The design bundle also carried a browser-side demo feed, a hardcoded PIN gate,
+a landing page, seeded telemetry/loadout data, and sample-schematic actions.
+None of it shipped. The console starts empty and reconnecting until the
+supervisor answers; the API is the only source of state, and a control that the
+API cannot service is absent.
+
 ## What ships
 
 | Path | Purpose |
@@ -35,7 +57,7 @@ npm run build
 `npm run build` runs `tsc --noEmit` and then Vite. The single-file plugin
 inlines JavaScript, CSS, fonts, and image assets into
 `deploy/linux/dashboard/public/index.html`. Expected output is roughly
-971 kB raw / 445 kB gzip. No external asset requests are made by the page.
+1.64 MB raw / 907 kB gzip. No external asset requests are made by the page.
 
 ### Dependencies
 
@@ -50,16 +72,18 @@ composition). Build time: `vite`, `@vitejs/plugin-react`,
   JetBrains Mono as inline `data:font/woff2` payloads. It is imported in
   `main.tsx` before `index.css`, so no font is fetched from the network.
 - Art: `app/src/assets/embedded/*.ts` hold the crest, agent portraits, block
-  renders, and the two hero photographs as text modules. `app/src/assets/index.ts`
-  looks them up at build time and every lookup is optional, so a missing
-  module degrades to drawn artwork instead of a broken image.
+  renders, world/hero photographs, provider marks, and add-on SVG icons as text
+  modules. `app/src/assets/index.ts` and `app/src/assets/world.ts` look them up
+  at build time and every lookup is optional, so a missing module degrades to
+  drawn artwork instead of a broken image.
 - The binary originals under `app/src/assets/` (hero JPGs, avatar JPGs, block
   PNGs) stay in the repository as the editable source of those embedded
   modules; the bundle does not read them.
 
-The Fleet hero renders the embedded photograph behind the summary panel, and
-falls back to a drawn gradient when no art is embedded. On phones the photo is
-narrowed to the right edge so the headline and telemetry tiles stay legible.
+The Fleet and Build heroes render embedded photography behind their summary
+panels, and fall back to drawn gradients when no art is embedded. On phones the
+Fleet photo is narrowed to the right edge so the headline and telemetry tiles
+stay legible.
 
 ## Routing
 
@@ -224,13 +248,16 @@ Run this after deploying:
 10. Toggling an add-on module changes `/api/addons`; the Disarm-all button
     asks for confirmation first.
 11. Reordering, enabling, editing, and removing a provider all persist
-    through `/api/providers`; the Test button reports latency and model count
-    for the session only.
+    through `/api/providers`; Test reports latency and model count for the
+    session only, and Test all probes every keyed route.
 12. Saving settings writes `/api/config` without a restart; "Save and restart
     ENI1" and the reconciliation button request the restart.
 13. `/?tab=legacy` still serves the old dashboard.
 14. Requests carry an `x-correlation-id` and fail cleanly when the supervisor
     is stopped.
+15. With no supervisor attached, the console shows the reconnect banner and
+    empty/last-known state only. There is no demo feed, PIN gate, seeded
+    telemetry, or sample schematic action.
 
 ## Notes
 

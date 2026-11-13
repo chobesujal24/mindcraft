@@ -72,8 +72,11 @@ function CurrentGrind() {
             <p className="num text-[12px] text-mute">
               {job.completed} of {job.requested} blocks
             </p>
+            <span className="num ml-auto font-mono text-[11px] text-faint">
+              {(job.completed / 64).toFixed(1)} / {(job.requested / 64).toFixed(1)} stacks
+            </span>
           </div>
-          <Bar value={pct} tone={blocked ? "danger" : paused ? "warn" : "accent"} className="mt-3" />
+          <Bar value={pct} milestones active={job.status === "running"} tone={blocked ? "danger" : paused ? "warn" : "accent"} className="mt-3" />
         </div>
       </div>
 
@@ -81,7 +84,7 @@ function CurrentGrind() {
         <Stat label="Rate" value={rate > 0 ? `${rate.toFixed(1)} / min` : "—"} />
         <Stat label="Time left" value={left === null ? "—" : fmtDuration(left)} />
         <Stat label="Remaining" value={`${remaining} blocks`} />
-        <Stat label="Status" value={job.status} tone={blocked ? "warn" : undefined} />
+        <Stat label="Elapsed" value={startedAt > 0 ? fmtDuration(Math.max(0, now - startedAt)) : "—"} />
       </dl>
 
       <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-line pt-4">
@@ -224,10 +227,11 @@ function GrindPlanner() {
       title="Queue a grind"
       sub="Pick a block and a count. ENI1 runs the job when the worker is free."
     >
-      <div className="flex items-center justify-between gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-[12px] font-medium text-ink">Target</p>
         <Segmented label="Resource category" value={category} onChange={switchCategory} options={blockCategories.map((c) => ({ value: c.id, label: c.label }))} />
       </div>
+
       <div role="radiogroup" aria-label="Grind target" className="mt-2.5 grid grid-cols-[repeat(auto-fill,minmax(44px,1fr))] gap-1.5">
         {blocksIn(category).map((block) => (
           <button
@@ -239,8 +243,8 @@ function GrindPlanner() {
             title={prettyBlock(block)}
             onClick={() => choose(block)}
             className={cn(
-              "flex aspect-square items-center justify-center rounded-lg border transition-colors duration-100",
-              target === block ? "border-rose/60 bg-rose/10 ring-1 ring-rose/30" : "border-line bg-panel-2 hover:border-line-2 hover:bg-panel-3",
+              "flex aspect-square items-center justify-center rounded-lg border transition-colors",
+              target === block ? "border-rose/60 bg-rose/10" : "border-line bg-panel-2 hover:border-line-2 hover:bg-panel-3",
             )}
           >
             <BlockIcon name={block} size={28} />
@@ -294,7 +298,11 @@ function GrindPlanner() {
 
 function GrindHistory() {
   const history = useConsole((s) => s.grind.history);
+  const queue = useConsole((s) => s.grind.queue);
+  const enqueue = useConsole((s) => s.grindEnqueue);
+  const queuing = useConsole((s) => Boolean(s.pending["grind:queue"]));
   const now = useConsole((s) => s.nowTick);
+  const full = queue.length >= QUEUE_LIMIT;
 
   return (
     <Panel eyebrow="Archive" title="Grind history" pad={false}>
@@ -309,7 +317,7 @@ function GrindHistory() {
             const span = Math.max(0, finished - (job.startedAt ?? job.createdAt));
             const name = prettyBlock(job.target);
             return (
-              <li key={job.id} className="flex items-center gap-3 py-3 pl-5 pr-3">
+              <li key={job.id} className="flex items-center gap-3 py-3 pl-5 pr-3 transition-colors hover:bg-panel-2/35">
                 <span className="flex size-8 shrink-0 items-center justify-center rounded-lg border border-line bg-panel-2">
                   <BlockIcon name={job.target} size={22} />
                 </span>
@@ -322,6 +330,16 @@ function GrindHistory() {
                     {fmtAgo(finished, now)}
                   </p>
                 </div>
+                <Button
+                  size="xs"
+                  variant="quiet"
+                  icon={Plus}
+                  disabled={full || queuing}
+                  disabledReason={`The queue holds at most ${QUEUE_LIMIT} waiting jobs.`}
+                  onClick={() => enqueue({ target: job.target, requested: job.requested })}
+                >
+                  Re-run
+                </Button>
                 <JobStatusLabel status={job.status} />
               </li>
             );
@@ -337,12 +355,12 @@ function GrindHistory() {
 export function Grind() {
   return (
     <div className="view-in grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_400px]">
-      <div className="contents xl:block xl:space-y-4">
-        <div className="space-y-4">
+      <div className="contents min-w-0 xl:block xl:space-y-4">
+        <div className="min-w-0 space-y-4">
           <CurrentGrind />
           <GrindQueue />
         </div>
-        <div className="order-last xl:order-none"><GrindHistory /></div>
+        <div className="order-last min-w-0 xl:order-none"><GrindHistory /></div>
       </div>
       <GrindPlanner />
     </div>

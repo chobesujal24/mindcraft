@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Maximize2, Radar as RadarIcon, ShieldCheck, User } from "lucide-react";
-import type { Threat } from "../../data/model";
+import { bearingCompass, type Threat } from "../../data/model";
 import { useConsole } from "../../state/store";
 import { Button, Chip, EmptyState, Panel, Segmented } from "../../ui/kit";
 import { Radar, rangeColor, type RadarRange } from "../../ui/viz";
@@ -40,6 +40,7 @@ function Summary({ contacts, range, on }: { contacts: Threat[]; range: RadarRang
 
 function ContactRow({ threat, range, active, onActive }: { threat: Threat; range: RadarRange; active: boolean; onActive: (v: boolean) => void }) {
   const share = Math.min(1, threat.distance / range);
+  const compass = bearingCompass(threat.bearing);
   return (
     <li
       onMouseEnter={() => onActive(true)}
@@ -59,7 +60,9 @@ function ContactRow({ threat, range, active, onActive }: { threat: Threat; range
           <div className="h-[3px] min-w-[60px] max-w-[220px] flex-1 overflow-hidden rounded-full bg-panel-3">
             <div className="h-full rounded-full" style={{ width: `${share * 100}%`, background: rangeColor(threat.distance) }} />
           </div>
-          <span className="num shrink-0 font-mono text-[10.5px] text-mute">{threat.distance.toFixed(1)} m</span>
+          <span className="num shrink-0 font-mono text-[10.5px] text-mute">
+            {threat.distance.toFixed(1)} m · {compass.deg}° {compass.label}
+          </span>
         </div>
       </div>
       <div className="hidden w-[128px] shrink-0 text-right sm:block">

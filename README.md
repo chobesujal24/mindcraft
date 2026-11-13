@@ -192,7 +192,7 @@ The agent supports continuous goal-driven self-prompting:
 
 ## Yozakura control dashboard
 
-The dashboard is the Linux control plane for the deployed cluster. It is a single-file React SPA served by `deploy/linux/dashboard/server.js`; the supervisor uses only Node built-ins and reads `public/index.html` per request. Every panel reads from the supervisor API and every control calls a real endpoint — where the API cannot do something, the control is absent rather than simulated.
+The dashboard is the Linux control plane for the deployed cluster. It is a single-file React SPA served by `deploy/linux/dashboard/server.js`; the supervisor uses only Node built-ins and reads `public/index.html` per request. Every panel reads from the supervisor API and every control calls a real endpoint — where the API cannot do something, the control is absent rather than simulated. The refreshed console carries embedded world/hero art, provider identity marks, add-on SVG icons, a bearing compass, and a Build hero render, but no browser-side demo feed, PIN gate, or seeded state.
 
 ### Build
 
@@ -319,9 +319,9 @@ The mock server is for design review and front-end checks only. It is not a prod
 
 | Area | Controls and behavior |
 | --- | --- |
-| Live summary hero | The headline states what needs attention (stopped unit, agent in trouble, running jobs) and links to the alert list. Beneath it: API latency p95 with a sparkline, requests per minute with a sparkline, API success rate, and active service count. Telemetry measures dashboard API traffic, not LLM inference. |
+| Live summary hero | The headline states what needs attention (stopped unit, agent in trouble, running jobs) and links to the alert list. Beneath it: API latency p95 with a sparkline, requests per minute with a sparkline, API success rate, active service count, and the cluster target with uptime. Telemetry measures dashboard API traffic, not LLM inference. |
 | Agents | One row per agent: portrait, name, role, current activity, health and food meters, state, and ping. Selecting a row opens the agent inspector: position, dimension, unit, ping, **Copy coordinates**, and **Recall to base**. Only ENI1 accepts dispatched commands; coordinator agents are read-only and say so. |
-| Player radar | Contacts relative to ENI1, range selector (16/32/64 m), held item, sneak state, distance, and **Expand**. Requires the **Player Radar** add-on; otherwise it explains that and links to Add-ons. |
+| Player radar | Contacts relative to ENI1 on a bearing compass, range selector (16/32/64 m), held item, sneak state, distance, and **Expand**. Requires the **Player Radar** add-on; otherwise it explains that and links to Add-ons. |
 | Cluster services | One row per systemd unit: state, role, PID, uptime, CPU, memory, and actions. **Start** is immediate; **Restart** and **Stop** require confirmation. |
 
 Primary APIs: `GET /api/status`, `GET /api/fleet`, `GET /api/telemetry`, `GET /api/addons`, `POST /api/service/:name/:action`.
@@ -334,7 +334,7 @@ Primary APIs: `GET /api/status`, `GET /api/fleet`, `GET /api/telemetry`, `GET /a
 | --- | --- |
 | Active job | Target, progress, collected/requested, rate per minute, time left, remaining blocks, status, **Pause**, and **Cancel**. Cancel asks for confirmation and keeps what was already collected. |
 | Queue | The server's queue, at most five waiting jobs. Each row shows the target, count, status, and age, plus a remove button. The console does not reorder the queue. |
-| Grind history | The last finished jobs with collected/requested, duration, and status. Cancelled jobs keep their partial count. The list is server-owned and read-only. |
+| Grind history | The last finished jobs with collected/requested, duration, and status. Cancelled jobs keep their partial count. **Re-run** queues the same target and count as a new job; the history itself is server-owned and read-only. |
 | Queue a grind | Resource category (`Ores`, `Logs`, `Terrain`, `Crops`), block grid, block-count stepper (1–128) with 16/32/64/128 presets, and **Queue N × resource**. The button is disabled with a reason when the queue is full. |
 
 Primary APIs: `GET /api/grind`, `POST /api/grind` (`queue`, `pause`, `resume`, `cancel`).
@@ -377,9 +377,9 @@ Primary APIs: `GET /api/addons`, `POST /api/addons`, `POST /api/addons/action`.
 
 | Area | Controls and behavior |
 | --- | --- |
-| KPI shelf | Providers enabled, keys configured, average handshake latency, and models reachable. Latency and model counts appear only after a Test run in this session. |
-| Routing order | The fallback chain, in order, with a name/model/endpoint filter. Each row shows priority, endpoint, key state, model, model count, latency, timeout, an enable switch, move up/down, **Test endpoint**, and **Edit**. |
-| Add and edit | Dialog with display name, model identifier, OpenAI-compatible base URL, timeout, environment key variable, and API key. The key variable is required and must match `^[A-Z][A-Z0-9_]{1,63}$`. Maximum 20 routes. |
+| KPI shelf | Providers enabled, keys configured, average handshake latency, and models reachable. Latency and model counts appear only after a Test run in this session. **Test all** probes every keyed route. |
+| Routing order | The fallback chain, in order, with a name/model/endpoint filter. Each row shows priority, detected provider mark, endpoint, key state, model, model count, latency, timeout, an enable switch, move up/down, **Test endpoint**, and **Edit**. |
+| Add and edit | Dialog with display name, model identifier, OpenAI-compatible base URL, timeout, environment key variable, and API key. The base URL resolves the provider identity and can prefill its brand, key variable, and model defaults. The key variable is required and must match `^[A-Z][A-Z0-9_]{1,63}$`. Maximum 20 routes. |
 | Save behavior | Every change posts the full table, which restarts `mc-foreman` so the new routing table is live. A failed save restores the previous order. |
 | Key handling | Keys are staged in memory, written write-only with `0600` permissions, and never returned to dashboard clients. Clearing a key is a staged action. **Test endpoint** stays disabled until a key is stored. |
 | Fallback rules | P1 first; on HTTP 429, 500, or timeout, try the next enabled route. Disabled routes receive no traffic. |

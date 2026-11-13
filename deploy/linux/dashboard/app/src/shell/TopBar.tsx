@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { Bell, ChevronRight, Menu, MoonStar, RefreshCw, Search, SunMedium, TerminalSquare, Volume2, VolumeX } from "lucide-react";
+import { Bell, ChevronRight, CircleHelp, Menu, MoonStar, RefreshCw, Search, SunMedium, TerminalSquare, Volume2, VolumeX } from "lucide-react";
 import { useAlerts, type AlertItem } from "../state/derive";
 import { useConsole } from "../state/store";
 import { IconButton, Kbd, StatusDot } from "../ui/kit";
@@ -13,11 +13,12 @@ function ConnectionPill() {
   const live = useConsole((s) => s.connection.status === "live");
   const age = useConsole((s) => Math.max(0, Math.round((s.nowTick - s.connection.lastSnapshotAt) / 1000)));
   const retryIn = useConsole((s) => Math.max(1, Math.ceil(s.connection.nextRetryIn / 1000)));
+  const target = useConsole((s) => s.clusterTarget);
   return (
     <div
       title={
         live
-          ? `The supervisor accepted the last snapshot ${age}s ago.`
+          ? `Connected to ${target || "the supervisor"} · last snapshot ${age}s ago.`
           : `The supervisor is unreachable. The console keeps the last snapshot and retries in ${retryIn}s.`
       }
       className={cn(
@@ -28,8 +29,14 @@ function ConnectionPill() {
       <StatusDot tone={live ? "ok" : "warn"} />
       {live ? (
         <>
-          Live
+          <span>Live</span>
           <span className="font-mono text-[11px] font-normal text-faint">{age === 0 ? "just now" : `${age}s ago`}</span>
+          {target && (
+            <>
+              <span aria-hidden="true" className="text-line-2">·</span>
+              <span className="font-mono text-[11px] font-normal text-faint">{target}</span>
+            </>
+          )}
         </>
       ) : (
         `Retry in ${retryIn}s`
@@ -98,7 +105,7 @@ function Notifications() {
         <div
           role="dialog"
           aria-label="Notifications"
-          className="pop-in z-40 overflow-hidden rounded-xl border border-line-2 shadow-pop max-sm:fixed max-sm:inset-x-3 max-sm:top-[76px] sm:absolute sm:right-0 sm:top-full sm:mt-2 sm:w-[340px]" style={{ backgroundColor: "var(--surface-solid)" }}
+          className="pop-in z-40 overflow-hidden rounded-xl border border-line-2 bg-[var(--surface-solid)] shadow-pop max-sm:fixed max-sm:inset-x-3 max-sm:top-[68px] sm:absolute sm:right-0 sm:top-full sm:mt-2 sm:w-[340px]"
         >
           <header className="flex items-baseline justify-between border-b border-line px-4 py-3">
             <h2 className="font-display text-[14.5px] font-semibold text-ink">Notifications</h2>
@@ -157,6 +164,7 @@ export function TopBar({ onMenu }: { onMenu: () => void }) {
   const refresh = useConsole((s) => s.refresh);
   const refreshing = useConsole((s) => s.refreshing);
   const setPaletteOpen = useConsole((s) => s.setPaletteOpen);
+  const setHelpOpen = useConsole((s) => s.setHelpOpen);
   const terminalOpen = useConsole((s) => s.terminalOpen);
   const setTerminalOpen = useConsole((s) => s.setTerminalOpen);
   const meta = VIEW_META[view];
@@ -187,7 +195,7 @@ export function TopBar({ onMenu }: { onMenu: () => void }) {
       </button>
 
       <Notifications />
-      <IconButton icon={Search} label="Search or jump to" onClick={() => setPaletteOpen(true)} className="sm:hidden" />
+      <IconButton icon={Search} label="Search or jump to" onClick={() => setPaletteOpen(true)} className="md:hidden" />
       <IconButton icon={RefreshCw} label="Refresh snapshot (R)" spin={refreshing} onClick={refresh} className="hidden md:inline-flex" />
       <IconButton
         icon={sound ? Volume2 : VolumeX}
@@ -196,6 +204,12 @@ export function TopBar({ onMenu }: { onMenu: () => void }) {
         active={sound}
         onClick={toggleSound}
         className="hidden md:inline-flex"
+      />
+      <IconButton
+        icon={CircleHelp}
+        label="Keyboard shortcuts (?)"
+        onClick={() => setHelpOpen(true)}
+        className="hidden lg:inline-flex"
       />
       <button
         type="button"

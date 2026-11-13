@@ -1,38 +1,26 @@
 import { useMemo, useState } from "react";
-import { motion } from "framer-motion";
 import {
   ArrowRight,
   Check,
-  Coins,
-  HeartPulse,
-  Home,
-  MapPin,
-  Play,
-  Radar as RadarIcon,
   Search,
-  Settings2,
-  ShieldAlert,
   ShieldOff,
-  ShoppingBag,
-  Swords,
-  Wallet,
   X,
-  type LucideIcon,
 } from "lucide-react";
 import { addonCatalog, dispatchGroups, type AddonDef, type DispatchAction } from "../data/model";
 import { armedCount, useConsole } from "../state/store";
+import { AddonSvgIcon } from "../ui/art";
 import { Button, Chip, EmptyState, IconButton, Panel, Segmented, Slider, Switch } from "../ui/kit";
 import { cn } from "../utils/cn";
 import { Threats } from "./addons/Threats";
 
 const CATEGORIES: AddonDef["category"][] = ["Combat", "Survival", "Recon", "Economy", "System"];
 
-const CATEGORY_ICON: Record<AddonDef["category"], LucideIcon> = {
-  Combat: Swords,
-  Survival: HeartPulse,
-  Recon: RadarIcon,
-  Economy: Coins,
-  System: Settings2,
+const CATEGORY_SVG_KEY: Record<AddonDef["category"], string> = {
+  Combat: "combat_cat",
+  Survival: "survival_cat",
+  Recon: "recon_cat",
+  Economy: "economy_cat",
+  System: "system_cat",
 };
 
 const CATEGORY_NOTE: Record<AddonDef["category"], string> = {
@@ -49,38 +37,29 @@ const CONFLICT: Record<string, string> = {
   cps_cooldown_mode: "cps_booster",
 };
 
-const iconFor = (id: string): LucideIcon => {
-  switch (id) {
-    case "auto_totem":
-    case "auto_armor":
-      return ShieldAlert;
-    case "cps_booster":
-    case "cps_cooldown_mode":
-      return Swords;
-    case "auto_gapple":
-    case "panic_escape":
-      return HeartPulse;
-    case "player_radar":
-      return RadarIcon;
-    case "auto_loot":
-      return MapPin;
-    case "shop_gui":
-    case "auto_sell":
-      return ShoppingBag;
+const dispatchSvgKey = (action: DispatchAction): string => {
+  switch (action.action) {
+    case "totem":
+      return "auto_totem";
+    case "eat":
+      return "auto_gapple";
+    case "armor":
+      return "auto_armor";
+    case "loot":
+      return "auto_loot";
+    case "shopgui":
+      return "shop_gui";
+    case "bal":
+      return "bal";
+    case "sell_all":
+      return "auto_sell";
+    case "send_command":
+      if (action.command === "/spawn") return "spawn";
+      if (action.command === "/server lifesteal" || action.command === "/randomtp") return "portal";
+      return "home";
     default:
-      return Settings2;
+      return "combat_cat";
   }
-};
-
-const DISPATCH_ICON: Record<string, LucideIcon> = {
-  totem: ShieldAlert,
-  eat: HeartPulse,
-  armor: Swords,
-  loot: Coins,
-  shopgui: ShoppingBag,
-  bal: Wallet,
-  sell_all: Coins,
-  send_command: Home,
 };
 
 /* ── Module row ────────────────────────────────────────── */
@@ -92,7 +71,6 @@ function ModuleRow({ def }: { def: AddonDef }) {
   const setValue = useConsole((s) => s.setAddonValue);
   const setView = useConsole((s) => s.setView);
   const askConfirm = useConsole((s) => s.askConfirm);
-  const Icon = iconFor(def.id);
   const home = def.id === "schematic_builder" ? "build" : "grind";
   const conflict = CONFLICT[def.id] ? addonCatalog.find((a) => a.id === CONFLICT[def.id]) : undefined;
 
@@ -120,10 +98,10 @@ function ModuleRow({ def }: { def: AddonDef }) {
           aria-hidden="true"
           className={cn(
             "mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg border transition-colors",
-            on || def.managed ? "border-line-2 bg-panel-2 text-mute" : "border-line text-faint",
+            on || def.managed ? "border-line-2 bg-panel-2 text-rose" : "border-line text-faint",
           )}
         >
-          <Icon size={15} strokeWidth={1.9} />
+          <AddonSvgIcon name={def.id} size={16} />
         </span>
 
         <div className="min-w-0 flex-1">
@@ -192,7 +170,7 @@ function DispatchRow({ action }: { action: DispatchAction }) {
   const cfg = useConsole((s) => s.addonConfig);
   const busy = useConsole((s) => Boolean(s.pending[`dispatch:${action.label}`]));
   const dispatch = useConsole((s) => s.dispatch);
-  const Icon = DISPATCH_ICON[action.action] ?? Play;
+  const svgKey = dispatchSvgKey(action);
   const needs = action.requires ? addonCatalog.find((a) => a.id === action.requires) : undefined;
   const locked = Boolean(needs) && cfg[action.requires!] !== true;
 
@@ -210,7 +188,7 @@ function DispatchRow({ action }: { action: DispatchAction }) {
         busy && "opacity-70",
       )}
     >
-      <Icon size={13} className="shrink-0 text-faint" />
+      <AddonSvgIcon name={svgKey} size={14} className="shrink-0 text-faint" />
       <span className="min-w-0 flex-1 truncate">{action.label}</span>
       {action.command && <span className="shrink-0 font-mono text-[10px] text-faint">{action.command}</span>}
     </button>
@@ -362,8 +340,8 @@ export function Addons() {
         <div key="modules" className="view-in space-y-4">
           <ModuleSummary />
 
-            <div className="flex flex-wrap items-center gap-2">
-              <div className="flex h-9 min-w-[180px] flex-1 items-center gap-2 rounded-lg border border-line bg-panel px-2.5 sm:max-w-[300px]">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex h-9 min-w-[200px] flex-1 items-center gap-2 rounded-lg border border-line bg-panel px-2.5 sm:max-w-[360px]">
                 <Search size={13} className="shrink-0 text-faint" />
                 <input
                   value={query}
@@ -393,11 +371,11 @@ export function Addons() {
                 </EmptyState>
               </Panel>
             ) : (
-              <div className="gap-4 xl:columns-2 xl:gap-y-0 xl:column-gap-4 [&>*]:mb-3 [&>*]:break-inside-avoid xl:[&>*]:mb-4">
+              <div className="grid items-start gap-4 xl:grid-cols-2">
                 {CATEGORIES.map((category) => {
                   const defs = matches.filter((def) => def.category === category);
                   if (defs.length === 0) return null;
-                  const Icon = CATEGORY_ICON[category];
+                  const svgKey = CATEGORY_SVG_KEY[category];
                   const active = defs.filter((def) => cfg[def.id] === true).length;
                   return (
                     <Panel
@@ -405,7 +383,7 @@ export function Addons() {
                       pad={false}
                       title={
                         <span className="flex items-center gap-2">
-                          <Icon size={15} className="shrink-0 text-faint" strokeWidth={1.9} />
+                          <AddonSvgIcon name={svgKey} size={15} className="shrink-0 text-faint" />
                           {category}
                         </span>
                       }

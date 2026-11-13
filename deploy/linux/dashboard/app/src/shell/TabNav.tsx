@@ -17,7 +17,14 @@ export function TabNav() {
     const node = strip.current;
     const tab = node?.querySelector<HTMLElement>(`[data-tab="${view}"]`);
     if (!node || !tab) return;
-    node.scrollTo({ left: tab.offsetLeft - (node.clientWidth - tab.offsetWidth) / 2, behavior: "smooth" });
+    // Centring the active tab is orientation, not decoration: jumping straight
+    // there keeps the row stable on view change and honours reduced-motion
+    // without a second media query.
+    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    node.scrollTo({
+      left: tab.offsetLeft - (node.clientWidth - tab.offsetWidth) / 2,
+      behavior: reduce ? "auto" : "smooth",
+    });
   }, [view]);
 
   return (

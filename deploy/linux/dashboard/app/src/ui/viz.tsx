@@ -59,7 +59,12 @@ export function Sparkline({
       </defs>
       <motion.path d={area} fill={`url(#sg-${id})`} initial={reducedMotion ? false : { opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.7, delay: 0.15 }} />
       <motion.path d={line} fill="none" stroke={stroke} strokeWidth="1.5" strokeLinecap="round" initial={reducedMotion ? false : { pathLength: 0 }} animate={{ pathLength: 1 }} transition={{ duration: 0.9, ease: "easeOut" }} />
-      <motion.circle cx={lastX} cy={lastY} r="2.2" fill={stroke} initial={reducedMotion ? false : { opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.2, delay: reducedMotion ? 0 : 0.7 }} />
+      {values.length >= 2 && (
+        <>
+          <circle cx={lastX} cy={lastY} r="5.5" fill={stroke} opacity="0.18" />
+          <motion.circle cx={lastX} cy={lastY} r="2.3" fill={stroke} initial={reducedMotion ? false : { opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.2, delay: reducedMotion ? 0 : 0.7 }} />
+        </>
+      )}
     </svg>
   );
 }
@@ -115,11 +120,33 @@ export function Radar({
       </defs>
 
       <circle cx={c} cy={c} r={c - 1} fill={`url(#rg-${id})`} stroke="var(--line-2)" />
+      {Array.from({ length: 12 }, (_, i) => {
+        const a = (i * 30 * Math.PI) / 180;
+        const inner = i % 3 === 0 ? c - 6.5 : c - 4;
+        const outer = c - 1.2;
+        return (
+          <line
+            key={i}
+            x1={c + Math.sin(a) * inner}
+            y1={c - Math.cos(a) * inner}
+            x2={c + Math.sin(a) * outer}
+            y2={c - Math.cos(a) * outer}
+            stroke="var(--line-2)"
+            strokeWidth={i % 3 === 0 ? "1.2" : "0.8"}
+          />
+        );
+      })}
       {rings.slice(0, 2).map((r) => (
-        <circle key={r} cx={c} cy={c} r={(c - 1) * r} fill="none" stroke="var(--line)" />
+        <circle key={r} cx={c} cy={c} r={(c - 1) * r} fill="none" stroke="var(--line)" strokeDasharray="2 2" />
       ))}
-      <line x1={c} y1={6} x2={c} y2={size - 6} stroke="var(--line)" />
-      <line x1={6} y1={c} x2={size - 6} y2={c} stroke="var(--line)" />
+      <line x1={c} y1={14} x2={c} y2={size - 14} stroke="var(--line)" />
+      <line x1={14} y1={c} x2={size - 14} y2={c} stroke="var(--line)" />
+
+      {/* Cardinal compass labels */}
+      <text x={c - 8} y={12} textAnchor="end" fontSize="8" fontWeight="600" fill="var(--faint)" fontFamily="var(--font-mono)">N</text>
+      <text x={size - 9} y={c - 3} textAnchor="end" fontSize="8" fontWeight="600" fill="var(--faint)" fontFamily="var(--font-mono)">E</text>
+      <text x={c + 8} y={size - 5} textAnchor="start" fontSize="8" fontWeight="600" fill="var(--faint)" fontFamily="var(--font-mono)">S</text>
+      <text x={9} y={c - 3} textAnchor="start" fontSize="8" fontWeight="600" fill="var(--faint)" fontFamily="var(--font-mono)">W</text>
 
       <g className="radar-sweep">
         <path

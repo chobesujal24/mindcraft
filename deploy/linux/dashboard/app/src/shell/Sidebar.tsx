@@ -1,6 +1,6 @@
 import { Cpu, Hammer, PanelLeftClose, PanelLeftOpen, Pickaxe, Puzzle, Settings2, Users, X, type LucideIcon } from "lucide-react";
 import { motion } from "framer-motion";
-import type { View } from "../data/model";
+import { fmtDuration, type View } from "../data/model";
 import { armedCount, useConsole } from "../state/store";
 import { Crest } from "../ui/art";
 import { IconButton, StatusDot } from "../ui/kit";
@@ -73,6 +73,7 @@ export function Sidebar({ drawer = false, onNavigate }: { drawer?: boolean; onNa
   const age = useConsole((s) => Math.max(0, Math.round((s.nowTick - s.connection.lastSnapshotAt) / 1000)));
   const retryIn = useConsole((s) => Math.max(1, Math.ceil(s.connection.nextRetryIn / 1000)));
   const appVersion = useConsole((s) => s.appVersion);
+  const clusterUptime = useConsole((s) => s.clusterUptime);
 
   return (
     <aside
@@ -83,13 +84,23 @@ export function Sidebar({ drawer = false, onNavigate }: { drawer?: boolean; onNa
       )}
     >
       <div className={cn("flex h-[60px] shrink-0 items-center gap-3 border-b border-line sm:h-[68px]", collapsed ? "justify-center" : "px-5")}>
-        <Crest size={36} />
-        {!collapsed && (
-          <div className="min-w-0 leading-none">
-            <p className="font-display text-[18px] font-semibold tracking-[-0.01em] text-ink">Yozakura</p>
-            <p className="mt-1.5 text-[11px] text-faint">Mindcraft console</p>
-          </div>
-        )}
+        <button
+          type="button"
+          onClick={() => {
+            setView("fleet");
+            onNavigate?.();
+          }}
+          title="Open the Fleet overview"
+          className="flex min-w-0 items-center gap-3 text-left transition-opacity hover:opacity-85"
+        >
+          <Crest size={36} />
+          {!collapsed && (
+            <div className="min-w-0 leading-none">
+              <p className="font-display text-[18px] font-semibold tracking-[-0.01em] text-ink">Yozakura</p>
+              <p className="mt-1.5 text-[11px] text-faint">Mindcraft console</p>
+            </div>
+          )}
+        </button>
         {drawer && <IconButton icon={X} label="Close navigation" size="sm" onClick={onNavigate} className="ml-auto" />}
       </div>
 
@@ -149,7 +160,9 @@ export function Sidebar({ drawer = false, onNavigate }: { drawer?: boolean; onNa
             <span className="num ml-auto font-mono text-[9.5px] text-faint">v{appVersion}</span>
           </div>
           <p className="mt-1.5 text-[11px] leading-relaxed text-faint">
-            {live ? `Snapshot ${age}s ago. Actions write to the host.` : `Next attempt in ${retryIn}s. Showing the last snapshot.`}
+            {live
+              ? `Snapshot ${age}s ago${clusterUptime ? ` · up ${fmtDuration(clusterUptime * 1000)}` : ""}.`
+              : `Next attempt in ${retryIn}s. Showing the last snapshot.`}
           </p>
           {!drawer && (
             <button

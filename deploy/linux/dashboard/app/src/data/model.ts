@@ -1,6 +1,6 @@
 /* UI data model for the Yozakura Console.
    Types mirror the supervisor API shapes in data/types.ts, adapted for display.
-   Everything here is derived from the live API; there are no fixtures. */
+   Everything here is derived from the live supervisor API. */
 
 export type View = "fleet" | "grind" | "build" | "addons" | "providers" | "settings";
 export const VIEWS: View[] = ["fleet", "grind", "build", "addons", "providers", "settings"];
@@ -129,7 +129,7 @@ export type Provider = {
   timeoutMs: number;
   keyConfigured: boolean;
   enabled: boolean;
-  /** Filled by the Test button for this session only. */
+  /** Filled by the Test button or initial baseline telemetry. */
   latencyMs: number | null;
   /** Filled by the Test button for this session only. */
   modelCount: number | null;
@@ -248,12 +248,6 @@ export function fmtBytes(bytes: number | null) {
   return `${value.toFixed(unit === 0 ? 0 : 1)} ${units[unit]}`;
 }
 
-export function fmtTokens(n: number) {
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
-  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}k`;
-  return `${n}`;
-}
-
 export function fmtAgo(ts: number | null | undefined, from = Date.now()) {
   if (!ts) return "never";
   const s = Math.max(0, Math.round((from - ts) / 1000));
@@ -289,4 +283,13 @@ export function prettyBlock(name: string) {
 export function coord(bot: Pick<FleetBot, "x" | "y" | "z">) {
   if (bot.x === null || bot.y === null || bot.z === null) return "—";
   return `${Math.round(bot.x)} / ${Math.round(bot.y)} / ${Math.round(bot.z)}`;
+}
+
+const COMPASS_DIRS = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"] as const;
+
+export function bearingCompass(rad: number): { deg: number; label: string } {
+  const rawDeg = ((rad * 180) / Math.PI) % 360;
+  const deg = Math.round((rawDeg + 360) % 360) % 360;
+  const idx = Math.round(deg / 45) % 8;
+  return { deg, label: COMPASS_DIRS[idx] };
 }

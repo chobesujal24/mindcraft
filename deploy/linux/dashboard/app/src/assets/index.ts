@@ -5,9 +5,19 @@
  * Every lookup is optional. If a module is missing the UI falls back to drawn
  * artwork (see ui/art.tsx) instead of rendering a broken image.
  */
+import * as blocksMod from "./embedded/blocks";
+import * as brandMod from "./embedded/brand";
+import * as heroDayMod from "./embedded/hero-day";
+import * as heroNightMod from "./embedded/hero-night";
+
 type Loose = Record<string, unknown>;
 
-const modules = import.meta.glob("./embedded/*.ts", { eager: true }) as Record<string, Loose>;
+const modules: Record<string, Loose> = {
+  "./embedded/blocks.ts": blocksMod as Loose,
+  "./embedded/brand.ts": brandMod as Loose,
+  "./embedded/hero-day.ts": heroDayMod as Loose,
+  "./embedded/hero-night.ts": heroNightMod as Loose,
+};
 
 const mod = (name: string): Loose => modules[`./embedded/${name}.ts`] ?? {};
 const text = (value: unknown): string | undefined =>
@@ -24,6 +34,13 @@ export const blockTexture = (name: string): string | undefined => text(blocks[na
 export const CREST = text(brand.crest);
 
 export const AVATARS = {
+  eni: text(avatars.eni),
+  miner: text(avatars.miner),
+  grinder: text(avatars.grinder),
+  builder: text(avatars.builder),
+};
+
+export const FALLBACK_AVATARS = {
   eni: text(avatars.eni),
   miner: text(avatars.miner),
   grinder: text(avatars.grinder),

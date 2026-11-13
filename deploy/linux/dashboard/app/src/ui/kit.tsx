@@ -57,6 +57,7 @@ type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
   variant?: "primary" | "secondary" | "quiet" | "danger";
   size?: "xs" | "sm" | "md";
   icon?: LucideIcon;
+  iconRight?: LucideIcon;
   loading?: boolean;
   loadingLabel?: string;
   /** Shown as a tooltip while the button is disabled, so the reason is never a mystery. */
@@ -64,7 +65,7 @@ type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
 };
 
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button(
-  { variant = "secondary", size = "md", icon: IconCmp, loading, loadingLabel, disabledReason, className, children, disabled, title, type = "button", ...rest },
+  { variant = "secondary", size = "md", icon: IconCmp, iconRight: IconRightCmp, loading, loadingLabel, disabledReason, className, children, disabled, title, type = "button", ...rest },
   ref,
 ) {
   return (
@@ -75,21 +76,42 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
       disabled={disabled || loading}
       title={disabled && disabledReason ? disabledReason : title}
       className={cn(
-        "inline-flex select-none items-center justify-center gap-1.5 whitespace-nowrap rounded-lg font-semibold transition-[background-color,border-color,color,transform,box-shadow] duration-200",
-        "disabled:cursor-not-allowed disabled:opacity-45",
-        size === "xs" && "h-[26px] px-2 text-[11px]",
-        size === "sm" && "h-9 px-3.5 text-[12px]",
-        size === "md" && "h-10 px-4 text-[13px]",
-        variant === "primary" && "bg-ink text-canvas enabled:hover:bg-[var(--primary-hover)] enabled:active:scale-[0.985] disabled:bg-panel-3 disabled:text-faint disabled:opacity-100",
-        variant === "secondary" && "border border-line-2 bg-panel-2/75 text-ink enabled:hover:border-faint/60 enabled:hover:bg-panel-3 enabled:active:scale-[0.985]",
-        variant === "quiet" && "border border-transparent text-mute enabled:hover:border-line enabled:hover:bg-panel-2 enabled:hover:text-ink",
-        variant === "danger" && "border border-danger/35 bg-danger/10 text-danger enabled:hover:bg-danger/16",
+        "group/btn inline-flex select-none items-center justify-center whitespace-nowrap rounded-lg font-medium transition-colors duration-150",
+        "disabled:cursor-not-allowed disabled:opacity-40",
+        size === "xs" && "h-7 gap-1.5 rounded-md px-2.5 text-[11.5px]",
+        size === "sm" && "h-8 gap-1.5 px-3 text-[12px]",
+        size === "md" && "h-9 gap-2 px-3.5 text-[12.5px]",
+        variant === "primary" && "btn-primary",
+        variant === "secondary" && "btn-secondary",
+        variant === "quiet" && "text-mute enabled:hover:bg-panel-2 enabled:hover:text-ink",
+        variant === "danger" && "border border-danger/35 bg-danger/10 text-danger enabled:hover:border-danger/50 enabled:hover:bg-danger/16",
         className,
       )}
       {...rest}
     >
-      {loading ? <Loader2 size={13} className="animate-spin" /> : IconCmp ? <IconCmp size={size === "xs" ? 12 : 14} strokeWidth={2} /> : null}
-      {loading && loadingLabel ? loadingLabel : children}
+      {loading ? (
+        <Loader2 size={size === "xs" ? 12 : 13.5} className=" shrink-0 animate-spin text-current" />
+      ) : IconCmp ? (
+        <IconCmp
+          size={size === "xs" ? 12 : 13.5}
+          strokeWidth={1.9}
+          className={cn(
+            "shrink-0 transition-colors",
+            variant === "primary" || variant === "danger" ? "text-current" : "text-mute group-hover/btn:text-ink",
+          )}
+        />
+      ) : null}
+      <span>{loading && loadingLabel ? loadingLabel : children}</span>
+      {!loading && IconRightCmp ? (
+        <IconRightCmp
+          size={size === "xs" ? 12 : 13.5}
+          strokeWidth={1.9}
+          className={cn(
+            "shrink-0 transition-colors",
+            variant === "primary" || variant === "danger" ? "text-current" : "text-mute group-hover/btn:text-ink",
+          )}
+        />
+      ) : null}
     </button>
   );
 });
@@ -211,15 +233,12 @@ export function Switch({
       onClick={() => onChange(!checked)}
       className={cn(
         "relative h-[22px] w-[38px] shrink-0 rounded-full border transition-colors duration-200",
-        checked ? "border-transparent bg-rose text-on-rose" : "border-line-2 bg-panel-3 text-mute",
+        checked ? "border-rose bg-rose text-on-rose" : "border-line-2 bg-panel-3 text-mute",
         disabled && "cursor-not-allowed opacity-40",
       )}
     >
       <motion.span
-        className={cn(
-          "absolute left-[2px] top-[2px] size-4 rounded-full shadow-[0_1px_2px_rgb(0_0_0/0.3)] transition-colors duration-200",
-          checked ? "bg-on-rose" : "bg-mute",
-        )}
+        className="absolute left-[2px] top-[2px] size-4 rounded-full bg-current shadow-[0_1px_2px_rgb(0_0_0/0.28)]"
         initial={false}
         animate={{ x: checked ? 16 : 0 }}
         transition={{ type: "spring", stiffness: 550, damping: 38 }}
@@ -300,7 +319,13 @@ export function Segmented<T extends string>({
             value === option.value ? "text-ink" : "text-faint hover:text-mute",
           )}
         >
-          {value === option.value && <motion.span layoutId={`segment-${groupId}`} className="absolute inset-0 rounded-md bg-raise shadow-sm" transition={{ type: "spring", stiffness: 500, damping: 38 }} />}
+          {value === option.value && (
+            <motion.span
+              layoutId={`segment-${groupId}`}
+              className="absolute inset-0 rounded-md bg-raise shadow-[0_1px_2px_rgb(0_0_0/0.14)]"
+              transition={{ type: "spring", stiffness: 500, damping: 38 }}
+            />
+          )}
           <span className="relative">{option.label}</span>
         </button>
       ))}
@@ -374,22 +399,52 @@ const meterTone = { accent: "bg-rose", neutral: "bg-ink/45", ok: "bg-ok", warn: 
 export function VialMeter({ value, max = 20, tone, label }: { value: number; max?: number; tone: "ok" | "warn" | "danger"; label: string }) {
   const cells = 10;
   const filled = Math.round((Math.max(0, value) / max) * cells);
+  const fill = tone === "ok" ? meterTone.neutral : meterTone[tone];
   return (
     <span className="flex items-center gap-[3px] max-[360px]:gap-[2px]" role="meter" aria-label={label} aria-valuenow={value} aria-valuemin={0} aria-valuemax={max}>
       {Array.from({ length: cells }, (_, i) => (
-        <span key={i} className={cn("h-[7px] w-[5px] rounded-[1.5px] transition-colors duration-300 max-[360px]:w-[4px]", i < filled ? meterTone[tone === "ok" ? "neutral" : tone] : "bg-panel-3")} />
+        <span
+          key={i}
+          className={cn(
+            "h-[7px] w-[5px] rounded-[1.5px] transition-colors duration-300 max-[360px]:w-[4px]",
+            i < filled ? fill : "bg-panel-3",
+          )}
+        />
       ))}
     </span>
   );
 }
 
-export function Bar({ value, tone = "accent", className }: { value: number; tone?: keyof typeof meterTone; className?: string }) {
+export function Bar({
+  value,
+  tone = "accent",
+  milestones,
+  active,
+  className,
+}: {
+  value: number;
+  tone?: keyof typeof meterTone;
+  milestones?: boolean;
+  /** Shows a subtle travelling light pulse when a job is actively progressing. */
+  active?: boolean;
+  className?: string;
+}) {
+  const clamped = Math.max(0, Math.min(100, value));
   return (
-    <div className={cn("h-[5px] w-full overflow-hidden rounded-full bg-panel-3", className)}>
+    <div className={cn("relative h-[5px] w-full overflow-hidden rounded-full bg-panel-3", className)}>
       <div
-        className={cn("h-full rounded-full transition-[width] duration-700", meterTone[tone])}
-        style={{ width: `${Math.max(0, Math.min(100, value))}%` }}
-      />
+        className={cn("relative h-full overflow-hidden rounded-full transition-[width] duration-700 ease-out", meterTone[tone])}
+        style={{ width: `${clamped}%` }}
+      >
+        {active && clamped > 0 && clamped < 100 && <span aria-hidden="true" className="bar-shimmer absolute inset-0" />}
+      </div>
+      {milestones && (
+        <div aria-hidden="true" className="pointer-events-none absolute inset-0 flex justify-evenly">
+          <span className="h-full w-px bg-panel/65" />
+          <span className="h-full w-px bg-panel/65" />
+          <span className="h-full w-px bg-panel/65" />
+        </div>
+      )}
     </div>
   );
 }
@@ -400,6 +455,7 @@ export function Field({
   label,
   hint,
   error,
+  dirty,
   children,
   htmlFor,
   className,
@@ -407,14 +463,16 @@ export function Field({
   label: string;
   hint?: ReactNode;
   error?: string;
+  dirty?: boolean;
   children: ReactNode;
   htmlFor?: string;
   className?: string;
 }) {
   return (
     <div className={cn("min-w-0", className)}>
-      <label htmlFor={htmlFor} className="block text-[12px] font-medium text-ink">
-        {label}
+      <label htmlFor={htmlFor} className="flex items-center gap-1.5 text-[12px] font-medium text-ink">
+        <span>{label}</span>
+        {dirty && <span title="Unsaved change" className="size-1.5 rounded-full bg-warn" />}
       </label>
       <div className="mt-1.5">{children}</div>
       {error ? (

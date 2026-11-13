@@ -1,6 +1,6 @@
 import { Check, Loader2 } from "lucide-react";
 import { useConsole } from "../../state/store";
-import { EmptyState, Panel } from "../../ui/kit";
+import { Chip, EmptyState, Panel } from "../../ui/kit";
 import { cn } from "../../utils/cn";
 
 export function ProfilesPanel() {
@@ -16,14 +16,20 @@ export function ProfilesPanel() {
       title="Profiles"
       sub="The persona and model ENI1 boots with."
       pad={false}
-      tools={switching ? <Loader2 size={14} className="animate-spin text-faint" aria-label="Switching profile" /> : undefined}
+      tools={
+        switching ? (
+          <Loader2 size={14} className="animate-spin text-faint" aria-label="Switching profile" />
+        ) : (
+          <Chip tone="neutral">{profiles.length} available</Chip>
+        )
+      }
     >
       {profiles.length === 0 ? (
         <EmptyState icon={Check} title="No profiles found">
           The supervisor reads profiles from the profiles folder. Create one there, then refresh.
         </EmptyState>
       ) : (
-        <ul aria-label="Profiles" className="space-y-1.5 p-3">
+        <ul aria-label="Profiles" className="max-h-[340px] space-y-1.5 overflow-y-auto p-3">
           {profiles.map((profile) => {
             const active = profile.file === activeProfile;
             return (
@@ -51,8 +57,13 @@ export function ProfilesPanel() {
                     {active && <Check size={10} strokeWidth={3} />}
                   </span>
                   <span className="min-w-0 flex-1">
-                    <span className="flex flex-wrap items-center gap-x-2">
+                    <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
                       <span className="text-[13px] font-semibold text-ink">{profile.name}</span>
+                      {active && (
+                        <span className="rounded bg-rose/15 px-1.5 py-px text-[10px] font-semibold text-rose">
+                          booted
+                        </span>
+                      )}
                       {profile.online && <span className="text-[10.5px] font-medium text-faint">online account</span>}
                     </span>
                     <span className="mt-0.5 block truncate font-mono text-[10.5px] text-faint">{profile.model}</span>

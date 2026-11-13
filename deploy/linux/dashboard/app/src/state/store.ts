@@ -155,6 +155,8 @@ type ConsoleState = {
   confirm: ConfirmState;
   // live snapshot
   appVersion: string;
+  clusterTarget: string;
+  clusterUptime: number | null;
   services: Service[];
   bots: FleetBot[];
   profiles: Profile[];
@@ -214,6 +216,7 @@ type ConsoleState = {
   buildTogglePause: () => void;
   providerToggle: (id: string) => void;
   providerTest: (id: string) => void;
+  providerTestAll: () => void;
   providerSave: (draft: ProviderDraft, key: { apiKey?: string; clear?: boolean }) => void;
   providerRemove: (id: string) => void;
   providerMove: (id: string, dir: -1 | 1) => void;
@@ -431,6 +434,8 @@ export const useConsole = create<ConsoleState>((set, get) => {
     confirm: null,
 
     appVersion: "0.1.4",
+    clusterTarget: "",
+    clusterUptime: null,
     services: [],
     bots: [],
     profiles: [],
@@ -590,6 +595,8 @@ export const useConsole = create<ConsoleState>((set, get) => {
 
       set({
         services: payload.status ? adaptStatus(payload.status, now) : previous.services,
+        clusterTarget: payload.status?.target || previous.clusterTarget,
+        clusterUptime: typeof payload.status?.uptime === "number" ? payload.status.uptime : previous.clusterUptime,
         bots,
         profiles,
         activeProfile,
@@ -1008,6 +1015,18 @@ export const useConsole = create<ConsoleState>((set, get) => {
         unpend(key);
         notify("Provider test failed", apiErrorMessage(error), "danger");
       }
+    },
+    providerTestAll: async () => {
+      if (busy("provider:test:all")) return;
+      const targets = get().providers.filter((p) => p.keyConfigured);
+      if (targets.length === 0) {
+        notify("No keyed providers", "Configure at least one API key before testing.", "warn");
+        return;
+      }
+      pend("provider:test:all");
+      log("api", `probing ${targets.length} configured provider endpoints`, "muted");
+      await Promise.allSettled(targets.map((p) => get().providerTest(p.id)));
+      unpend("provider:test:all");
     },
     providerSave: async (draft, key) => {
       if (busy("providers:save")) return;

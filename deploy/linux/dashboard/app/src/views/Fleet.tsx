@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from "react";
 import { motion } from "framer-motion";
 import { Antenna, ArrowUpRight, Ban, ChevronRight, Copy, Drumstick, Heart, Home, Maximize2, Play, RotateCw } from "lucide-react";
-import { coord, fmtBytes, fmtDuration, fmtInt, prettyBlock, type FleetBot, type Service, type Threat } from "../data/model";
+import { bearingCompass, coord, fmtBytes, fmtDuration, fmtInt, prettyBlock, type FleetBot, type Service, type Threat } from "../data/model";
 import { useAlerts } from "../state/derive";
 import { botTone, foodTone, healthTone, useConsole } from "../state/store";
 import { HeroArt, Portrait } from "../ui/art";
@@ -39,11 +39,17 @@ function FleetHero() {
   const latency = useConsole((s) => s.latencyHistory);
   const throughput = useConsole((s) => s.throughputHistory);
   const services = useConsole((s) => s.services);
+  const profiles = useConsole((s) => s.profiles);
+  const activeProfile = useConsole((s) => s.activeProfile);
+  const clusterTarget = useConsole((s) => s.clusterTarget);
+  const clusterUptime = useConsole((s) => s.clusterUptime);
   const setNotificationsOpen = useConsole((s) => s.setNotificationsOpen);
   const setTerminalOpen = useConsole((s) => s.setTerminalOpen);
   const grind = useConsole((s) => s.grind.current);
   const build = useConsole((s) => s.build.current);
   const alerts = useAlerts();
+
+  const currentProfile = profiles.find((p) => p.file === activeProfile);
 
   // The headline states the most important fact, not a slogan.
   const urgent = alerts.filter((alert) => alert.tone !== "info");
@@ -78,8 +84,28 @@ function FleetHero() {
     <section className="hero-summary relative overflow-hidden rounded-[14px] border border-line" aria-label="Fleet summary">
       <HeroArt />
       <div className="relative px-5 py-6 sm:px-6 lg:px-7">
-        <p className="eyebrow">Live summary</p>
-        <h2 className="mt-3 max-w-[28ch] text-balance font-display text-[clamp(24px,2.4vw,31px)] font-semibold leading-[1.12] tracking-[-0.015em] text-ink">
+        <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
+          <p className="eyebrow">Live summary</p>
+          {currentProfile && (
+            <>
+              <span aria-hidden="true" className="text-line-2">·</span>
+              <span className="font-mono text-[11px] text-mute">{currentProfile.name}</span>
+            </>
+          )}
+          {clusterTarget && (
+            <>
+              <span aria-hidden="true" className="hidden text-line-2 sm:inline">·</span>
+              <span className="hidden font-mono text-[11px] text-faint sm:inline">{clusterTarget}</span>
+            </>
+          )}
+          {clusterUptime !== null && (
+            <>
+              <span aria-hidden="true" className="hidden text-line-2 md:inline">·</span>
+              <span className="num hidden font-mono text-[11px] text-faint md:inline">up {fmtDuration(clusterUptime * 1000)}</span>
+            </>
+          )}
+        </div>
+        <h2 className="mt-2.5 max-w-[28ch] text-balance font-display text-[clamp(24px,2.4vw,31px)] font-semibold leading-[1.12] tracking-[-0.015em] text-ink">
           {headline}
         </h2>
         <p className="mt-2 max-w-[59ch] text-[12.5px] leading-relaxed text-mute">
@@ -146,12 +172,17 @@ function BotRow({ bot, selected, onSelect }: { bot: FleetBot; selected: boolean;
       <span id={`agent-summary-${bot.id}`} className="sr-only">
         {bot.state}. {bot.activity}. Health {bot.health ?? "unknown"} of 20. Food {bot.food ?? "unknown"} of 20.
       </span>
-      <span className="flex min-w-0 items-center gap-3">
-        <Portrait name={bot.name} src={bot.avatar} size={40} className={cn(dark && "opacity-50 grayscale")} />
+      <span className="flex min-w-0 items-center gap-3.5">
+        <Portrait name={bot.name} src={bot.avatar} size={42} className={cn(dark && "opacity-50 grayscale")} />
         <span className="min-w-0">
-          <span className="flex min-w-0 items-baseline gap-2">
+          <span className="flex min-w-0 items-baseline gap-1.5">
             <span className="truncate text-[13.5px] font-semibold text-ink">{bot.name}</span>
-            <span className="hidden shrink-0 text-[11px] text-faint lg:inline">{bot.role}</span>
+            <span className="hidden shrink-0 text-[11px] text-faint lg:inline">· {bot.role}</span>
+            {bot.dimension && (
+              <span className="hidden shrink-0 font-mono text-[10.5px] text-faint md:inline">
+                · {bot.dimension.replace(/^minecraft:/, "").replace(/^the_/, "")}
+              </span>
+            )}
           </span>
           <span className="mt-0.5 block truncate text-[11.5px] text-mute">{bot.activity}</span>
         </span>
@@ -196,6 +227,7 @@ function BotRow({ bot, selected, onSelect }: { bot: FleetBot; selected: boolean;
 function AgentInspector({ bot }: { bot: FleetBot }) {
   const recall = useConsole((s) => s.recallBot);
   const toast = useConsole((s) => s.toast);
+  const setView = useConsole((s) => s.setView);
   const lead = useConsole((s) => s.bots[0]);
   const tone = botTone(bot.state);
   const dark = isDark(bot);
@@ -217,17 +249,23 @@ function AgentInspector({ bot }: { bot: FleetBot }) {
 
   const facts: [string, string][] = [
     ["Position", coord(bot)],
-    ["Dimension", bot.dimension ?? "—"],
+    ["Dimension", bot.dimension ? bot.dimension.replace(/^minecraft:/, "").replace(/_/g, " ") : "—"],
     ["Unit", `${bot.unit}.service`],
     ["Ping", dark || bot.ping === null ? "—" : `${bot.ping} ms`],
   ];
 
   return (
-    <section className="panel overflow-hidden" aria-label={`Details for ${bot.name}`}>
-      <header className="flex items-center gap-3 border-b border-line px-4 py-3">
-        <Portrait name={bot.name} src={bot.avatar} size={36} className={cn(dark && "opacity-50 grayscale")} />
+    <motion.section
+      initial={{ opacity: 0, y: 5 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.22, ease: "easeOut" }}
+      className="panel overflow-hidden"
+      aria-label={`Details for ${bot.name}`}
+    >
+      <header className="flex items-center gap-3.5 border-b border-line px-4 py-3.5">
+        <Portrait name={bot.name} src={bot.avatar} size={46} className={cn(dark && "opacity-50 grayscale")} />
         <div className="min-w-0 flex-1">
-          <p className="eyebrow">Selected agent</p>
+          <p className="eyebrow">{bot.role}</p>
           <h3 className="mt-0.5 truncate font-display text-[17px] font-semibold text-ink">{bot.name}</h3>
         </div>
         <span className={cn("flex items-center gap-1.5 text-[11px] font-semibold capitalize", STATE_TEXT[tone])}>
@@ -235,7 +273,7 @@ function AgentInspector({ bot }: { bot: FleetBot }) {
           {bot.state}
         </span>
       </header>
-      <dl className="grid grid-cols-2 gap-x-4 gap-y-2 px-4 py-3">
+      <dl className="grid grid-cols-2 gap-x-4 gap-y-2.5 px-4 py-3">
         {facts.map(([label, value]) => (
           <div key={label} className="min-w-0">
             <dt className="eyebrow">{label}</dt>
@@ -245,7 +283,7 @@ function AgentInspector({ bot }: { bot: FleetBot }) {
           </div>
         ))}
       </dl>
-      <div className="flex flex-wrap gap-2 border-t border-line px-4 py-2.5">
+      <div className="flex flex-wrap items-center gap-2 border-t border-line px-4 py-2.5">
         <Button size="xs" icon={Copy} onClick={copy}>
           Copy coordinates
         </Button>
@@ -263,8 +301,17 @@ function AgentInspector({ bot }: { bot: FleetBot }) {
         >
           Recall to base
         </Button>
+        {isLead && (
+          <button
+            type="button"
+            onClick={() => setView("addons")}
+            className="ml-auto inline-flex items-center gap-1 text-[11px] font-medium text-mute transition-colors hover:text-ink"
+          >
+            Dispatch <ArrowUpRight size={11} />
+          </button>
+        )}
       </div>
-    </section>
+    </motion.section>
   );
 }
 
@@ -289,20 +336,25 @@ function ContactList({ contacts, range, active, onActive }: { contacts: Threat[]
   }
   return (
     <ul className="mt-3 space-y-0.5">
-      {contacts.map((t) => (
-        <li
-          key={t.username}
-          onMouseEnter={() => onActive(t.username)}
-          onMouseLeave={() => onActive(null)}
-          className={cn("flex items-center gap-2 rounded-lg px-2 py-1.5 text-[12px] transition-colors", active === t.username && "bg-panel-2")}
-        >
-          <span className="size-[7px] shrink-0 rounded-full" style={{ background: rangeColor(t.distance) }} />
-          <span className="truncate font-medium text-ink">{t.username}</span>
-          {t.sneaking && <span className="shrink-0 text-[10.5px] font-medium text-warn">sneaking</span>}
-          <span className="num ml-auto shrink-0 font-mono text-[11px] text-mute">{t.distance.toFixed(1)} m</span>
-          <span className="w-[104px] shrink-0 truncate text-right text-[11px] text-faint">{t.heldItem.replace(/_/g, " ")}</span>
-        </li>
-      ))}
+      {contacts.map((t) => {
+        const compass = bearingCompass(t.bearing);
+        return (
+          <li
+            key={t.username}
+            onMouseEnter={() => onActive(t.username)}
+            onMouseLeave={() => onActive(null)}
+            className={cn("flex items-center gap-2 rounded-lg px-2 py-1.5 text-[12px] transition-colors", active === t.username && "bg-panel-2")}
+          >
+            <span className="size-[7px] shrink-0 rounded-full" style={{ background: rangeColor(t.distance) }} />
+            <span className="truncate font-medium text-ink">{t.username}</span>
+            {t.sneaking && <span className="shrink-0 text-[10.5px] font-medium text-warn">sneaking</span>}
+            <span className="num ml-auto shrink-0 font-mono text-[11px] text-mute">
+              {t.distance.toFixed(1)} m · {compass.label}
+            </span>
+            <span className="w-[96px] shrink-0 truncate text-right text-[11px] text-faint">{t.heldItem.replace(/_/g, " ")}</span>
+          </li>
+        );
+      })}
     </ul>
   );
 }
@@ -325,7 +377,6 @@ function RadarPanel() {
       eyebrow="Player radar"
       title="Nearby players"
       sub={radarOn ? "Range and bearing relative to ENI1." : "The Player Radar add-on is disarmed."}
-      bodyClassName="p-4"
       tools={
         radarOn ? (
           <Button size="sm" variant="quiet" icon={Maximize2} onClick={() => setLightbox("radar")}>
@@ -339,7 +390,7 @@ function RadarPanel() {
           <div className="mb-3 flex justify-center">
             <RangePicker value={range} onChange={setRange} />
           </div>
-          <Radar threats={contacts} range={range} size={180} active={active} onActive={setActive} />
+          <Radar threats={contacts} range={range} size={192} active={active} onActive={setActive} />
           <ContactList contacts={contacts} range={range} active={active} onActive={setActive} />
         </>
       ) : (
@@ -463,11 +514,13 @@ function ServiceRow({ svc }: { svc: Service }) {
 function ServicesPanel() {
   const services = useConsole((s) => s.services);
   const up = services.filter((svc) => svc.state === "active").length;
+  const totalCpu = services.reduce((acc, svc) => acc + (svc.cpu ?? 0), 0);
+  const totalMem = services.reduce((acc, svc) => acc + (svc.mem ?? 0), 0);
   return (
     <Panel
       eyebrow="Host · systemd"
       title="Services"
-      sub="The units that keep the fleet running."
+      sub={`The units that keep the fleet running · ${totalCpu.toFixed(1)}% CPU · ${fmtBytes(totalMem)} RAM`}
       pad={false}
       tools={
         <Chip tone={up === services.length ? "ok" : "warn"} dot>
@@ -500,14 +553,11 @@ export function Fleet() {
       <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_372px]">
         <div className="space-y-4">
           <section aria-labelledby="agents-title">
-            <div className="mb-3 flex items-end justify-between gap-3 px-1">
-              <div>
-                <h2 id="agents-title" className="font-display text-[16px] font-semibold text-ink">
-                  Agents
-                </h2>
-                <p className="text-[11.5px] text-faint max-sm:hidden">Select an agent to inspect its status and position.</p>
-              </div>
-              <p className="num shrink-0 text-[11.5px] font-medium text-mute">
+            <div className="mb-2.5 flex items-baseline justify-between gap-3 px-1">
+              <h2 id="agents-title" className="font-display text-[16px] font-semibold text-ink">
+                Agents
+              </h2>
+              <p className="num text-[11.5px] font-medium text-mute">
                 {reporting} of {bots.length} reporting
               </p>
             </div>
@@ -521,12 +571,8 @@ export function Fleet() {
         </div>
 
         <div className="space-y-4">
-          {/* The inspector swaps immediately; `view-in` handles the entrance so
-              the panel is never held back by a stalled animation frame. */}
           {selected && (
-            <div key={selected.id} className="view-in">
-              <AgentInspector bot={selected} />
-            </div>
+            <AgentInspector key={selected.id} bot={selected} />
           )}
           <RadarPanel />
         </div>

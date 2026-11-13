@@ -186,6 +186,7 @@ export function TerminalDock() {
           ))}
         </div>
         {paused && <span className="shrink-0 rounded-full bg-warn/14 px-2 py-px text-[10px] font-semibold text-warn">paused</span>}
+        <span className="num hidden font-mono text-[10px] text-faint md:inline">{lines.length} lines</span>
         <IconButton size="sm" icon={paused ? Play : Pause} label={paused ? "Resume stream" : "Pause stream"} onClick={togglePause} />
         <IconButton size="sm" icon={Eraser} label="Clear scrollback" onClick={termClear} />
         <IconButton size="sm" icon={ChevronDown} label={`Collapse console (${MOD_LABEL} J)`} onClick={() => setOpen(false)} />

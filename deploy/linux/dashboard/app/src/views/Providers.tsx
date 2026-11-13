@@ -1,8 +1,10 @@
 import { useState, type FormEvent } from "react";
 import { motion } from "framer-motion";
-import { ArrowDown, ArrowUp, Copy, Cpu, Pencil, Plus, Search, X, Zap } from "lucide-react";
+import { ArrowDown, ArrowUp, Copy, Cpu, Pencil, Plus, Search, Sparkles, X } from "lucide-react";
 import type { Provider } from "../data/model";
+import { resolveProviderIdentity } from "../data/provider-identity";
 import { useConsole } from "../state/store";
+import { ProviderLogo } from "../ui/art";
 import { Button, EmptyState, Field, IconButton, Metric, Panel, Switch, TextInput } from "../ui/kit";
 import { Dialog } from "../ui/overlay";
 import { cn } from "../utils/cn";
@@ -61,12 +63,21 @@ function ProviderKPIs() {
 
 /* ── Row ───────────────────────────────────────────────── */
 
-function monogram(name: string) {
-  const letters = name.replace(/[^A-Za-z0-9]/g, " ").trim().split(/\s+/).slice(0, 2).map((part) => part[0]?.toUpperCase() ?? "");
-  return letters.join("") || "?";
-}
-
-function ProviderRow({ p, index, total, sortable, onEdit }: { p: Provider; index: number; total: number; sortable: boolean; onEdit: () => void }) {
+function ProviderRow({
+  p,
+  index,
+  enabledRank,
+  total,
+  sortable,
+  onEdit,
+}: {
+  p: Provider;
+  index: number;
+  enabledRank: number;
+  total: number;
+  sortable: boolean;
+  onEdit: () => void;
+}) {
   const toggle = useConsole((s) => s.providerToggle);
   const test = useConsole((s) => s.providerTest);
   const move = useConsole((s) => s.providerMove);
@@ -95,36 +106,54 @@ function ProviderRow({ p, index, total, sortable, onEdit }: { p: Provider; index
     >
       {/* Identity */}
       <div className="flex min-w-0 items-center gap-2.5 xl:flex-1">
-        <div className="flex shrink-0 flex-col">
-          <IconButton size="sm" icon={ArrowUp} label={`Move ${p.name} up`} className="h-[17px]" disabled={!sortable || busy || index === 0} onClick={() => move(p.id, -1)} />
-          <IconButton size="sm" icon={ArrowDown} label={`Move ${p.name} down`} className="h-[17px]" disabled={!sortable || busy || index === total - 1} onClick={() => move(p.id, 1)} />
+        <div className="flex shrink-0 flex-col gap-0.5">
+          <button
+            type="button"
+            aria-label={`Move ${p.name} up`}
+            title={`Move ${p.name} up`}
+            disabled={!sortable || busy || index === 0}
+            onClick={() => move(p.id, -1)}
+            className="flex size-5 items-center justify-center rounded text-mute transition-colors enabled:hover:bg-panel-2 enabled:hover:text-ink disabled:cursor-not-allowed disabled:opacity-30"
+          >
+            <ArrowUp size={12} strokeWidth={2} />
+          </button>
+          <button
+            type="button"
+            aria-label={`Move ${p.name} down`}
+            title={`Move ${p.name} down`}
+            disabled={!sortable || busy || index === total - 1}
+            onClick={() => move(p.id, 1)}
+            className="flex size-5 items-center justify-center rounded text-mute transition-colors enabled:hover:bg-panel-2 enabled:hover:text-ink disabled:cursor-not-allowed disabled:opacity-30"
+          >
+            <ArrowDown size={12} strokeWidth={2} />
+          </button>
         </div>
-        <span
-          aria-hidden="true"
-          className={cn(
-            "flex size-9 shrink-0 items-center justify-center rounded-[10px] border font-display text-[11px] font-semibold",
-            p.enabled ? "border-line-2 bg-panel-2 text-mute" : "border-line text-faint",
-          )}
-        >
-          {monogram(p.name)}
-        </span>
+        <ProviderLogo baseURL={p.baseURL} name={p.name} model={p.model} enabled={p.enabled} size={36} />
         <div className="min-w-0 flex-1">
-          <p className="flex items-baseline gap-1.5">
-            <span className="num text-[10.5px] text-faint">#{index + 1}</span>
+          <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+            <span className="num text-[11px] text-faint">#{index + 1}</span>
             <span className={cn("truncate text-[13.5px] font-semibold", p.enabled ? "text-ink" : "text-mute")} title={p.name}>
               {p.name}
             </span>
-          </p>
-          <button
-            type="button"
-            onClick={copy}
-            title={p.baseURL}
-            className="group flex max-w-full items-center gap-1.5 rounded text-left font-mono text-[10.5px] text-faint transition-colors hover:text-mute"
-          >
-            <span className="truncate">{p.baseURL.replace(/^https?:\/\//, "")}</span>
-            <Copy size={10} className="shrink-0 opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100" />
-          </button>
-          <p className={cn("mt-0.5 truncate font-mono text-[10px]", keyState.tone)}>{keyState.text}</p>
+            {p.enabled && (
+              <span className={cn("text-[11px]", enabledRank === 0 ? "font-medium text-rose" : "text-faint")}>
+                · {enabledRank === 0 ? "Primary" : `Fallback #${enabledRank}`}
+              </span>
+            )}
+          </div>
+          <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 font-mono text-[10.5px]">
+            <button
+              type="button"
+              onClick={copy}
+              title={p.baseURL}
+              className="group inline-flex max-w-full items-center gap-1 rounded text-left text-faint transition-colors hover:text-mute"
+            >
+              <span className="truncate">{p.baseURL.replace(/^https?:\/\//, "")}</span>
+              <Copy size={10} className="shrink-0 opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100" />
+            </button>
+            <span aria-hidden="true" className="text-line-2">·</span>
+            <span className={cn("truncate", keyState.tone)}>{keyState.text}</span>
+          </div>
         </div>
         <div className="shrink-0 xl:hidden">
           <Switch checked={p.enabled} onChange={() => toggle(p.id)} label={`${p.name}, ${p.enabled ? "enabled" : "disabled"}`} />
@@ -132,7 +161,7 @@ function ProviderRow({ p, index, total, sortable, onEdit }: { p: Provider; index
       </div>
 
       {/* Numbers */}
-      <dl className="grid min-w-0 grid-cols-3 gap-3 xl:w-[286px] xl:shrink-0 xl:gap-4">
+      <dl className="grid min-w-0 grid-cols-2 gap-3 xl:w-[240px] xl:shrink-0 xl:gap-4">
         <div className="min-w-0">
           <dt className="eyebrow !text-[10px]">Model</dt>
           <dd className="mt-0.5 truncate font-mono text-[11px] text-mute" title={p.model || "not reported"}>
@@ -140,38 +169,35 @@ function ProviderRow({ p, index, total, sortable, onEdit }: { p: Provider; index
           </dd>
         </div>
         <div>
-          <dt className="eyebrow !text-[10px]">Models</dt>
-          <dd className="num mt-0.5 text-[12px] font-medium text-ink">{p.modelCount === null ? "—" : p.modelCount.toLocaleString("en-US")}</dd>
-        </div>
-        <div>
           <dt className="eyebrow !text-[10px]">Latency</dt>
           <dd className={cn("num mt-0.5 text-[12px] font-medium", p.latencyMs === null ? "text-faint" : p.latencyMs > 500 ? "text-warn" : "text-ink")}>
             {p.latencyMs === null ? "—" : `${p.latencyMs} ms`}
           </dd>
+          {p.modelCount !== null && (
+            <dd className="num mt-0.5 font-mono text-[10px] text-faint">{p.modelCount} models</dd>
+          )}
         </div>
       </dl>
 
       <div className="flex items-center justify-between gap-3 xl:contents">
-        <p className="min-w-0 text-[10.5px] leading-snug text-faint xl:w-[146px] xl:shrink-0">
-          {p.timeoutMs.toLocaleString("en-US")} ms timeout
+        <p className="min-w-0 text-[10.5px] leading-snug text-faint xl:w-[96px] xl:shrink-0">
+          {(p.timeoutMs / 1000).toFixed(0)}s timeout
         </p>
 
         <div className="flex shrink-0 items-center gap-1">
           <Button
-            size="sm"
+            size="xs"
             variant="quiet"
-            icon={Zap}
             loading={testing}
             loadingLabel="Testing"
             disabled={!p.keyConfigured}
             disabledReason={`Add a value for ${p.keyName} first.`}
             onClick={() => test(p.id)}
           >
-            <span className="sm:hidden">Test</span>
-            <span className="max-sm:hidden">Test endpoint</span>
+            Test
           </Button>
-          <IconButton icon={Pencil} label={`Edit ${p.name}`} onClick={onEdit} />
-          <span className="hidden xl:inline-flex">
+          <IconButton size="sm" icon={Pencil} label={`Edit ${p.name}`} onClick={onEdit} />
+          <span className="hidden pl-1 xl:inline-flex">
             <Switch checked={p.enabled} onChange={() => toggle(p.id)} label={`${p.name}, ${p.enabled ? "enabled" : "disabled"}`} />
           </span>
         </div>
@@ -194,6 +220,52 @@ function ProviderDialog({ provider, onClose }: { provider: Provider | null; onCl
   const [apiKey, setApiKey] = useState("");
   const [clearKey, setClearKey] = useState(false);
   const [attempted, setAttempted] = useState(false);
+  const [autoBrand, setAutoBrand] = useState<string | null>(null);
+  const [autoKey, setAutoKey] = useState<string | null>(null);
+  const [autoModel, setAutoModel] = useState<string | null>(null);
+
+  const identity = resolveProviderIdentity({ baseURL, name, model });
+  const urlOnlyIdentity = resolveProviderIdentity({ baseURL });
+
+  const handleUrlChange = (nextUrl: string) => {
+    setBaseURL(nextUrl);
+    if (!provider) {
+      const detected = resolveProviderIdentity({ baseURL: nextUrl });
+      if (detected.brandName && (!name.trim() || name === autoBrand)) {
+        setName(detected.brandName);
+        setAutoBrand(detected.brandName);
+      }
+      if (detected.suggestedKeyName && (!keyName.trim() || keyName === autoKey)) {
+        setKeyName(detected.suggestedKeyName);
+        setAutoKey(detected.suggestedKeyName);
+      }
+      if (detected.suggestedModel && (!model.trim() || model === autoModel)) {
+        setModel(detected.suggestedModel);
+        setAutoModel(detected.suggestedModel);
+      }
+    }
+  };
+
+  const canApplyDefaults =
+    Boolean(urlOnlyIdentity.brandName) &&
+    ((urlOnlyIdentity.brandName && name !== urlOnlyIdentity.brandName) ||
+      (urlOnlyIdentity.suggestedKeyName && keyName !== urlOnlyIdentity.suggestedKeyName) ||
+      (urlOnlyIdentity.suggestedModel && !model.trim()));
+
+  const applyDefaults = () => {
+    if (urlOnlyIdentity.brandName) {
+      setName(urlOnlyIdentity.brandName);
+      setAutoBrand(urlOnlyIdentity.brandName);
+    }
+    if (urlOnlyIdentity.suggestedKeyName) {
+      setKeyName(urlOnlyIdentity.suggestedKeyName);
+      setAutoKey(urlOnlyIdentity.suggestedKeyName);
+    }
+    if (urlOnlyIdentity.suggestedModel && !model.trim()) {
+      setModel(urlOnlyIdentity.suggestedModel);
+      setAutoModel(urlOnlyIdentity.suggestedModel);
+    }
+  };
 
   const errors = {
     name: name.trim() ? "" : "Give the provider a name.",
@@ -259,15 +331,49 @@ function ProviderDialog({ provider, onClose }: { provider: Provider | null; onCl
       }
     >
       <form id="provider-form" className="space-y-4" onSubmit={submit} noValidate>
-        <Field label="Display name" htmlFor="pv-name" error={shown("name")}>
-          <TextInput id="pv-name" data-autofocus="" placeholder="e.g. Intern AI, DeepSeek R1, Groq" value={name} invalid={Boolean(shown("name"))} onChange={(e) => setName(e.target.value)} />
+        <Field label="OpenAI-compatible base URL" htmlFor="pv-url" error={shown("baseURL")} hint="Paste the endpoint URL first — the console detects the provider logo and defaults automatically.">
+          <div className="flex items-center gap-2.5">
+            <ProviderLogo baseURL={baseURL} name={name} model={model} enabled size={36} />
+            <TextInput
+              id="pv-url"
+              data-autofocus=""
+              className="font-mono"
+              placeholder="https://api.openai.com/v1 or https://api.deepseek.com/v1"
+              value={baseURL}
+              invalid={Boolean(shown("baseURL"))}
+              onChange={(e) => handleUrlChange(e.target.value)}
+            />
+          </div>
+          {baseURL.trim() && (identity.brandName || identity.rootDomain) && (
+            <div className="mt-2 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-line bg-panel-2/60 px-2.5 py-1.5 text-[11px]">
+              <span className="flex items-center gap-1.5 text-mute">
+                <Sparkles size={11.5} className="shrink-0 text-rose" />
+                <span>
+                  {identity.isKnown ? "Detected provider:" : "Resolved domain:"}{" "}
+                  <strong className="font-semibold text-ink">{identity.brandName ?? identity.rootDomain}</strong>
+                  {identity.rootDomain && identity.brandName ? (
+                    <span className="ml-1 font-mono text-[10.5px] text-faint">({identity.rootDomain})</span>
+                  ) : null}
+                </span>
+              </span>
+              {canApplyDefaults && (
+                <button
+                  type="button"
+                  onClick={applyDefaults}
+                  className="font-medium text-rose transition-colors hover:text-rose-2"
+                >
+                  Apply {urlOnlyIdentity.brandName} defaults
+                </button>
+              )}
+            </div>
+          )}
         </Field>
-        <Field label="OpenAI-compatible base URL" htmlFor="pv-url" error={shown("baseURL")}>
-          <TextInput id="pv-url" className="font-mono" placeholder="https://chat.intern-ai.org.cn/api/v1" value={baseURL} invalid={Boolean(shown("baseURL"))} onChange={(e) => setBaseURL(e.target.value)} />
+        <Field label="Display name" htmlFor="pv-name" error={shown("name")}>
+          <TextInput id="pv-name" placeholder="e.g. OpenAI, DeepSeek, Groq" value={name} invalid={Boolean(shown("name"))} onChange={(e) => setName(e.target.value)} />
         </Field>
         <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_150px]">
           <Field label="Model identifier" htmlFor="pv-model" error={shown("model")}>
-            <TextInput id="pv-model" className="font-mono" placeholder="e.g. internvl3.5-latest or gpt-4o" value={model} invalid={Boolean(shown("model"))} onChange={(e) => setModel(e.target.value)} />
+            <TextInput id="pv-model" className="font-mono" placeholder="e.g. gpt-4o or deepseek-chat" value={model} invalid={Boolean(shown("model"))} onChange={(e) => setModel(e.target.value)} />
           </Field>
           <Field label="Timeout (ms)" htmlFor="pv-timeout" error={shown("timeoutMs")}>
             <TextInput id="pv-timeout" inputMode="numeric" value={timeoutMs} invalid={Boolean(shown("timeoutMs"))} onChange={(e) => setTimeoutMs(e.target.value.replace(/[^0-9]/g, ""))} />
@@ -279,7 +385,7 @@ function ProviderDialog({ provider, onClose }: { provider: Provider | null; onCl
             <TextInput
               id="pv-keyname"
               className="font-mono"
-              placeholder="e.g. INTERN_API_KEY"
+              placeholder="e.g. OPENAI_API_KEY"
               value={keyName}
               invalid={Boolean(shown("keyName"))}
               onChange={(e) => {
@@ -334,11 +440,14 @@ function ProviderDialog({ provider, onClose }: { provider: Provider | null; onCl
 export function Providers() {
   const providers = useConsole((s) => s.providers);
   const saving = useConsole((s) => Boolean(s.pending["providers:save"]));
+  const testingAll = useConsole((s) => Boolean(s.pending["provider:test:all"]));
+  const testAll = useConsole((s) => s.providerTestAll);
   const [query, setQuery] = useState("");
   const [editing, setEditing] = useState<string | null>(null);
 
   const term = query.trim().toLowerCase();
   const visible = term ? providers.filter((p) => `${p.name} ${p.model} ${p.baseURL}`.toLowerCase().includes(term)) : providers;
+  const enabledList = providers.filter((p) => p.enabled);
   const target = editing && editing !== "new" ? (providers.find((p) => p.id === editing) ?? null) : null;
   const atLimit = providers.length >= MAX_PROVIDERS;
 
@@ -352,16 +461,28 @@ export function Providers() {
         sub="The router tries enabled endpoints from the top down."
         pad={false}
         tools={
-          <Button
-            size="sm"
-            variant="primary"
-            icon={Plus}
-            disabled={atLimit || saving}
-            disabledReason={atLimit ? `The server accepts at most ${MAX_PROVIDERS} routes.` : "A routing change is being saved."}
-            onClick={() => setEditing("new")}
-          >
-            Add provider
-          </Button>
+          <>
+            <Button
+              size="sm"
+              variant="secondary"
+              loading={testingAll}
+              loadingLabel="Probing"
+              disabled={!providers.some((p) => p.keyConfigured)}
+              onClick={testAll}
+            >
+              Test all
+            </Button>
+            <Button
+              size="sm"
+              variant="primary"
+              icon={Plus}
+              disabled={atLimit || saving}
+              disabledReason={atLimit ? `The server accepts at most ${MAX_PROVIDERS} routes.` : "A routing change is being saved."}
+              onClick={() => setEditing("new")}
+            >
+              Add provider
+            </Button>
+          </>
         }
       >
         <div className="flex items-center gap-2 border-b border-line px-4 py-2.5 lg:px-5">
@@ -388,7 +509,15 @@ export function Providers() {
         ) : (
           <ol className="divide-y divide-line">
             {visible.map((p) => (
-              <ProviderRow key={p.id} p={p} index={providers.indexOf(p)} total={providers.length} sortable={!term} onEdit={() => setEditing(p.id)} />
+              <ProviderRow
+                key={p.id}
+                p={p}
+                index={providers.indexOf(p)}
+                enabledRank={enabledList.indexOf(p)}
+                total={providers.length}
+                sortable={!term}
+                onEdit={() => setEditing(p.id)}
+              />
             ))}
           </ol>
         )}

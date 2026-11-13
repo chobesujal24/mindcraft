@@ -24,10 +24,11 @@ type FlagKey = "load_memory" | "narrate_behavior" | "auto_open_ui" | "allow_inse
 
 function TextSetting({ name, label, hint, numeric, signed, error, className }: { name: TextKey; label: string; hint?: string; numeric?: boolean; signed?: boolean; error?: string; className?: string }) {
   const value = useConsole((s) => s.settings[name]);
+  const saved = useConsole((s) => s.savedSettings[name]);
   const setSetting = useConsole((s) => s.setSetting);
   const id = `setting-${name}`;
   return (
-    <Field label={label} htmlFor={id} hint={hint} error={error} className={className}>
+    <Field label={label} htmlFor={id} hint={hint} error={error} dirty={value !== saved} className={className}>
       <TextInput
         id={id}
         value={value}
@@ -51,13 +52,15 @@ function TextSetting({ name, label, hint, numeric, signed, error, className }: {
 
 function FlagSetting({ name, label, hint, danger }: { name: FlagKey; label: string; hint: string; danger?: boolean }) {
   const checked = useConsole((s) => s.settings[name]);
+  const saved = useConsole((s) => s.savedSettings[name]);
   const setSetting = useConsole((s) => s.setSetting);
   return (
     <div className="flex items-center justify-between gap-4 py-3 first:pt-0 last:pb-0">
       <div className="min-w-0">
-        <p className="text-[13px] font-medium text-ink">
-          {label}
-          {danger && checked && <span className="ml-2 text-[10.5px] font-semibold text-warn">risky</span>}
+        <p className="flex items-center gap-1.5 text-[13px] font-medium text-ink">
+          <span>{label}</span>
+          {checked !== saved && <span title="Unsaved change" className="size-1.5 rounded-full bg-warn" />}
+          {danger && checked && <span className="ml-1 text-[10.5px] font-semibold text-warn">risky</span>}
         </p>
         <p className="mt-0.5 text-[11.5px] leading-snug text-faint">{hint}</p>
       </div>

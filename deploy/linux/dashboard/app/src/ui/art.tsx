@@ -1,5 +1,9 @@
-import { useId } from "react";
-import { HERO, blockTexture } from "../assets";
+import { useEffect, useId, useState } from "react";
+import { FALLBACK_AVATARS, HERO, blockTexture } from "../assets";
+import { worldArt } from "../assets/world";
+import { ADDON_SVGS } from "../assets/embedded/addon-svgs";
+import { PROVIDER_SVGS } from "../assets/embedded/provider-svgs";
+import { resolveProviderIdentity } from "../data/provider-identity";
 import { AnimatePresence, motion } from "framer-motion";
 import { useConsole } from "../state/store";
 import { cn } from "../utils/cn";
@@ -103,33 +107,67 @@ export function BlockIcon({ name, size = 28, className }: { name: string; size?:
 
 /* ── Agent portrait ────────────────────────────────────── */
 
-export function Portrait({ name, src, size = 40, className }: { name: string; src?: string; size?: number; className?: string }) {
-  const borderRadius = Math.round(size * 0.26);
-  if (src) {
-    return (
-      <img
-        src={src}
-        alt=""
-        draggable={false}
-        className={cn("shrink-0 object-cover ring-1 ring-line-2", className)}
-        style={{ width: size, height: size, borderRadius }}
-      />
-    );
+function resolveAgentKind(name: string): {
+  key: "eni" | "miner" | "grinder" | "builder";
+  badgeSvg: string;
+  visorColor: string;
+} {
+  const lower = name.toLowerCase();
+  if (
+    lower.includes("grind") ||
+    lower.includes("scout") ||
+    lower.includes("recon") ||
+    lower.includes("patrol") ||
+    lower.includes("guard") ||
+    lower.includes("combat")
+  ) {
+    return { key: "grinder", badgeSvg: "cps_booster", visorColor: "#e7c54a" };
   }
+  if (lower.includes("miner") || lower.includes("excavat") || lower.includes("dig")) {
+    return { key: "miner", badgeSvg: "grind_worker", visorColor: "#5fd6d0" };
+  }
+  if (lower.includes("build") || lower.includes("arch") || lower.includes("schem")) {
+    return { key: "builder", badgeSvg: "schematic_builder", visorColor: "#f0927e" };
+  }
+  return { key: "eni", badgeSvg: "auto_totem", visorColor: "#d9a5a9" };
+}
+
+export function Portrait({ name, src, size = 40, className }: { name: string; src?: string; size?: number; className?: string }) {
+  const borderRadius = Math.round(size * 0.22);
+  const kind = resolveAgentKind(name);
+  const fallbackSrc = FALLBACK_AVATARS[kind.key];
+  const [stage, setStage] = useState<"primary" | "fallback" | "svg">("primary");
+
+  useEffect(() => {
+    setStage("primary");
+  }, [src, name]);
+
+  const activeSrc = stage === "primary" ? src ?? fallbackSrc : stage === "fallback" ? fallbackSrc : undefined;
   return (
     <span
       aria-hidden="true"
-      className={cn("flex shrink-0 items-center justify-center font-display font-semibold ring-1 ring-line-2", className)}
-      style={{
-        width: size,
-        height: size,
-        borderRadius,
-        fontSize: size * 0.4,
-        background: "var(--panel-3)",
-        color: "var(--mute)",
-      }}
+      className={cn("relative inline-flex shrink-0 select-none overflow-hidden border border-line-2 bg-panel-2", className)}
+      style={{ width: size, height: size, borderRadius }}
     >
-      {name.slice(0, 1)}
+      {activeSrc ? (
+        <img
+          src={activeSrc}
+          alt=""
+          draggable={false}
+          referrerPolicy="no-referrer"
+          onError={() => setStage((s) => (s === "primary" && fallbackSrc && fallbackSrc !== src ? "fallback" : "svg"))}
+          className="size-full object-cover"
+        />
+      ) : (
+        <svg viewBox="0 0 32 32" className="size-full" aria-hidden="true">
+          <rect width="32" height="32" fill="var(--panel-3)" />
+          <rect x="6" y="6" width="20" height="20" rx="2" fill="var(--panel-2)" stroke="var(--line-2)" strokeWidth="1.5" />
+          <rect x="8" y="12" width="16" height="5" fill={kind.visorColor} opacity="0.9" />
+          <rect x="10" y="13" width="4" height="3" fill="#fff" opacity="0.75" />
+          <rect x="18" y="13" width="4" height="3" fill="#fff" opacity="0.75" />
+          <rect x="11" y="20" width="10" height="2.5" fill="var(--mute)" opacity="0.5" />
+        </svg>
+      )}
     </span>
   );
 }
@@ -150,11 +188,39 @@ export function HeroArt() {
   );
 }
 
+/** Backdrop for the schematic builder; follows the active file name when a
+    matching world render is embedded, otherwise the default sanctuary art. */
+export function BuildHeroArt() {
+  const fileName = useConsole((s) => s.build.current?.fileName ?? "");
+  const matchedImage = worldArt(fileName);
+
+  return (
+    <div className="hero-art" aria-hidden="true">
+      <div className="hero-art-layer">
+        <img src={matchedImage} alt="" draggable={false} style={{ objectPosition: "68% 48%" }} />
+      </div>
+    </div>
+  );
+}
+
 /* ── Schematic footprint ───────────────────────────────── */
 
 /** Isometric outline of a schematic's bounding box, drawn from its real dimensions. */
-export function Blueprint({ dims, size = 40, className }: { dims: [number, number, number]; size?: number; className?: string }) {
-  const [w, h, d] = dims;
+export function Blueprint({
+  dims,
+  rotation = 0,
+  size = 40,
+  className,
+}: {
+  dims: [number, number, number];
+  rotation?: number;
+  size?: number;
+  className?: string;
+}) {
+  const swapped = rotation === 90 || rotation === 270;
+  const [rawW, h, rawD] = dims;
+  const w = swapped ? rawD : rawW;
+  const d = swapped ? rawW : rawD;
   const longest = Math.max(w, h, d, 1);
   const sx = w / longest;
   const sy = h / longest;
@@ -162,6 +228,7 @@ export function Blueprint({ dims, size = 40, className }: { dims: [number, numbe
   const project = (x: number, y: number, z: number): [number, number] => [(x * sx - z * sz) * 0.866, (x * sx + z * sz) * 0.5 - y * sy];
 
   const corner = {
+    a: project(0, 0, 0),
     b: project(1, 0, 0),
     c: project(1, 0, 1),
     d: project(0, 0, 1),
@@ -175,7 +242,7 @@ export function Blueprint({ dims, size = 40, className }: { dims: [number, numbe
   const maxX = Math.max(...all.map((p) => p[0]));
   const minY = Math.min(...all.map((p) => p[1]));
   const maxY = Math.max(...all.map((p) => p[1]));
-  const pad = 0.12;
+  const pad = 0.16;
   const poly = (...points: [number, number][]) => points.map((p) => p.map((n) => n.toFixed(3)).join(",")).join(" ");
 
   return (
@@ -187,12 +254,113 @@ export function Blueprint({ dims, size = 40, className }: { dims: [number, numbe
       className={cn("shrink-0 text-rose", className)}
       fill="currentColor"
       stroke="currentColor"
-      strokeWidth="0.035"
+      strokeWidth="0.032"
       strokeLinejoin="round"
     >
       <polygon points={poly(corner.e, corner.f, corner.g, corner.h)} fillOpacity="0.3" />
       <polygon points={poly(corner.d, corner.c, corner.g, corner.h)} fillOpacity="0.16" />
       <polygon points={poly(corner.b, corner.c, corner.g, corner.f)} fillOpacity="0.07" />
     </svg>
+  );
+}
+
+/* ── Real Add-on SVGs (Iconify game-icons) ─────────────── */
+
+export function AddonSvgIcon({
+  name,
+  size = 16,
+  className,
+}: {
+  name: string;
+  size?: number;
+  className?: string;
+}) {
+  const entry = ADDON_SVGS[name] ?? ADDON_SVGS.combat_cat;
+  if (!entry) return null;
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox={entry.viewBox}
+      aria-hidden="true"
+      className={cn("shrink-0", className)}
+      fill="currentColor"
+    >
+      <path d={entry.d} />
+    </svg>
+  );
+}
+
+/* ── Intelligent AI Provider Logo ──────────────────────── */
+
+function monogram(name: string) {
+  const letters = name
+    .replace(/[^A-Za-z0-9]/g, " ")
+    .trim()
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() ?? "");
+  return letters.join("") || "?";
+}
+
+export function ProviderLogo({
+  baseURL,
+  name,
+  model,
+  enabled = true,
+  size = 36,
+  className,
+}: {
+  baseURL?: string;
+  name?: string;
+  model?: string;
+  enabled?: boolean;
+  size?: number;
+  className?: string;
+}) {
+  const identity = resolveProviderIdentity({ baseURL, name, model });
+  const embedded = identity.key ? PROVIDER_SVGS[identity.key] : undefined;
+  const candidateKey = identity.remoteLogoUrls.join("|");
+  const [candidateIndex, setCandidateIndex] = useState(0);
+
+  useEffect(() => {
+    setCandidateIndex(0);
+  }, [candidateKey]);
+
+  const iconSize = Math.round(size * 0.54);
+  const remoteUrl = !embedded ? identity.remoteLogoUrls[candidateIndex] : undefined;
+
+  return (
+    <span
+      aria-hidden="true"
+      title={identity.brandName ? `${identity.brandName}${identity.rootDomain ? ` (${identity.rootDomain})` : ""}` : name}
+      style={{ width: size, height: size }}
+      className={cn(
+        "flex shrink-0 items-center justify-center rounded-[10px] border font-display text-[11px] font-semibold transition-colors",
+        enabled ? "border-line-2 bg-panel-2 text-ink" : "border-line bg-panel-2/50 text-faint opacity-65",
+        className,
+      )}
+    >
+      {embedded ? (
+        <span
+          style={{ width: iconSize, height: iconSize }}
+          className={cn("inline-flex shrink-0 items-center justify-center [&>svg]:size-full", embedded.monochrome && "text-ink")}
+          dangerouslySetInnerHTML={{ __html: embedded.svg }}
+        />
+      ) : remoteUrl ? (
+        <img
+          key={remoteUrl}
+          src={remoteUrl}
+          alt=""
+          draggable={false}
+          referrerPolicy="no-referrer"
+          style={{ width: iconSize, height: iconSize }}
+          className="shrink-0 select-none object-contain"
+          onError={() => setCandidateIndex((i) => i + 1)}
+        />
+      ) : (
+        <span className="text-mute">{monogram(name || identity.brandName || "?")}</span>
+      )}
+    </span>
   );
 }

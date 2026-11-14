@@ -7,15 +7,22 @@ on port `3000`, but it is no longer published.
 ## What ships
 
 `public/` is a fully static site with no runtime dependencies: one HTML file,
-three local WOFF2 fonts, the Yozakura crest, the night-pavilion hero, and the
-agent avatars. All styling and interaction code is inline. There are no
-external font, analytics, or image requests.
+two local WOFF2 fonts (Plus Jakarta Sans and JetBrains Mono), the Yozakura
+crest, and the agent avatars. All styling and interaction code is inline. There
+are no external font, analytics, or image requests.
 
-The design reuses the console's material palette and type system (Fraunces,
-Plus Jakarta Sans, JetBrains Mono) so the landing page and the production
-console read as one product. Motion is limited to a slow hero push, drifting
-petals, scroll reveals, and a gentle pointer tilt on the console preview; all of
-it is disabled under `prefers-reduced-motion`.
+The page is deliberately product-first: crisp sans typography, the console
+preview immediately below the hero, a six-card control-plane section, a
+self-host quick start, and one closing action. Yozakura identity is limited to
+the crest, the warm sumi palette, and small rose accents — not a cinematic hero.
+Motion is limited to a short hero fade and scroll reveals, and is disabled under
+`prefers-reduced-motion`.
+
+The console preview is an illustrative, non-interactive snapshot labelled
+**Interface preview**, with a second label below the frame. It does not claim to
+show live data, and its buttons are decorative. The production console adds live
+data, authentication, and working controls. The only working control on the
+landing page is **Copy** on the quick-start terminal.
 
 ## Links
 
@@ -23,11 +30,12 @@ it is disabled under `prefers-reduced-motion`.
 | --- | --- |
 | Launch the console / Open production console | `https://dash.qyvera.qzz.io/` |
 | Read the source / Browse the repository | `https://github.com/chobesujal24/mindcraft` |
+| Read the setup guide | repository `README.md#quick-start-local` |
 | Documentation | repository `README.md` |
 | MIT license | repository `LICENSE` |
 
-The console preview is labelled **Preview / Snapshot** and is decorative. It
-does not claim to show live data and has no working controls.
+The console preview is labelled **Interface preview / not live data** and is
+decorative. It does not claim to show live data and has no working controls.
 
 ## Serve locally
 
@@ -39,6 +47,13 @@ LANDING_PORT=9000 node server.mjs
 `server.mjs` serves only files under `public/`, sets a restrictive CSP and
 security headers, returns `404` for unknown paths, and exposes `/healthz`.
 It binds to `127.0.0.1` by default.
+
+## Caching
+
+HTML is served with `Cache-Control: no-cache`. Everything under `assets/` is
+served with a seven-day immutable cache, so a changed asset must get a new
+filename (or a versioned URL). The current page adds `og-cover.jpg`; the fonts,
+crest, and avatars keep their existing names and are unchanged.
 
 ## Production topology
 

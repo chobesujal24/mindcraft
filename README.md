@@ -3,6 +3,8 @@
 A customized [Mindcraft](https://github.com/mindcraft-bots/mindcraft) 0.1.4 deployment built around **ENI1**, a Minecraft agent that runs on Mineflayer and an LLM backend. This fork adds a Linux control dashboard, a persistent grind/build worker surface, provider failover, protocol and movement hardening, and an offline regression suite.
 
 - Repository: <https://github.com/chobesujal24/mindcraft>
+- Live site: <https://qyvera.qzz.io>
+- Production console: <https://dash.qyvera.qzz.io> (password-gated)
 - Runtime: Node.js + Mineflayer + an OpenAI-compatible LLM provider
 - Checked-in target: Minecraft **26.1**, offline auth, `127.0.0.1:56730`
 - Control UI: **Yozakura** dashboard on `127.0.0.1:8092` (Linux) and the built-in MindServer UI on `127.0.0.1:8080`
@@ -40,6 +42,7 @@ A customized [Mindcraft](https://github.com/mindcraft-bots/mindcraft) 0.1.4 depl
 | `src/mindcraft/` | MindServer, agent process management, and the built-in web UI. |
 | `src/utils/mcdata.js` | Protocol compatibility, movement throttling, and the `tick_end` shim. |
 | `deploy/linux/dashboard/` | Yozakura dashboard supervisor, built SPA, legacy page, and React source. |
+| `deploy/linux/landing/` | Static Mindcraft landing page, dependency-free server, and deployment script. |
 | `deploy/linux/dashboard/app/` | Vite + React + TypeScript dashboard source. |
 | `addons_config.json` | Add-on defaults. |
 | `ai-providers.json` | Provider routing table. Contains key **names**, never key values. |
